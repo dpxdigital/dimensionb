@@ -22,7 +22,7 @@ class ChaptersController extends BaseApiController
 
         $db = $this->db();
         $query = $db->table('chapters c')
-            ->select('c.*, cm_me.id IS NOT NULL AS is_joined')
+            ->select('c.*, IF(cm_me.id IS NOT NULL, 1, 0) AS is_joined')
             ->join("chapter_members cm_me", "cm_me.chapter_id = c.id AND cm_me.user_id = {$userId}", 'left')
             ->where('c.is_active', 1)
             ->limit($limit);
@@ -56,10 +56,10 @@ class ChaptersController extends BaseApiController
         $db      = $this->db();
 
         $chapter = $db->table('chapters c')
-            ->select('c.*, (SELECT COUNT(*) FROM chapter_members WHERE chapter_id = c.id AND user_id = ?) AS is_joined', false)
+            ->select("c.*, (SELECT COUNT(*) FROM chapter_members WHERE chapter_id = c.id AND user_id = {$userId}) AS is_joined", false)
             ->where('c.id', (int) $id)
             ->where('c.is_active', 1)
-            ->get(1, 0, [$userId])->getRowArray();
+            ->get()->getRowArray();
 
         if (! $chapter) {
             return $this->error('Chapter not found.', 404);
