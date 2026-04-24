@@ -10,7 +10,7 @@ class CreatePostsTable extends Migration
     {
         $this->forge->addField([
             'id'         => ['type' => 'BIGINT', 'unsigned' => true, 'auto_increment' => true],
-            'user_id'    => ['type' => 'BIGINT', 'unsigned' => true],
+            'user_id'    => ['type' => 'INT', 'unsigned' => true],
             'body'       => ['type' => 'TEXT', 'null' => true],
             'media'      => ['type' => 'JSON', 'null' => true],
             'like_count' => ['type' => 'INT', 'unsigned' => true, 'default' => 0],
