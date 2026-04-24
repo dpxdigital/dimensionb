@@ -109,6 +109,9 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->get('users/(:num)',                    'Profile\ProfileController::show/$1');
         $routes->get('users/(:num)/connection-status', 'Connections\ConnectionsController::connectionStatus/$1');
         $routes->post('users/(:num)/block',            'Profile\ProfileController::block/$1');
+        $routes->get('users/(:num)/follow-status',    'Profile\FollowController::status/$1');
+        $routes->post('users/(:num)/follow',          'Profile\FollowController::follow/$1');
+        $routes->delete('users/(:num)/follow',        'Profile\FollowController::unfollow/$1');
 
         // ── Chat — Conversations (specific sub-routes before wildcard :id) ──────
         $routes->get('chat/conversations',                       'Chat\ChatController::conversations');
