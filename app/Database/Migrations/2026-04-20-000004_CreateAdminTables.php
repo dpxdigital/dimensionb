@@ -8,6 +8,8 @@ class CreateAdminTables extends Migration
 {
     public function up(): void
     {
+        $this->db->query('SET FOREIGN_KEY_CHECKS = 0');
+
         // ── admin_users ────────────────────────────────────────────────────────
         $this->db->query("
             CREATE TABLE IF NOT EXISTS `admin_users` (
@@ -58,6 +60,8 @@ class CreateAdminTables extends Migration
                 CONSTRAINT `fk_nb_admin` FOREIGN KEY (`admin_id`) REFERENCES `admin_users` (`id`) ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+
+        $this->db->query('SET FOREIGN_KEY_CHECKS = 1');
 
         // Seed default super admin (password: Admin@2025)
         $hash = password_hash('Admin@2025', PASSWORD_BCRYPT, ['cost' => 12]);
