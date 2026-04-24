@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/dimezbhe/api.dimensions.global
+    - /bin/cp -R . $DEPLOYPATH
+    - cd $DEPLOYPATH && php spark migrate --force
