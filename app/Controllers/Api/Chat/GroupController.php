@@ -44,10 +44,12 @@ class GroupController extends BaseApiController
             return $this->error('Maximum 49 other members (50 total including you).', 422);
         }
 
-        // All members must have accepted connections with current user
+        // Verify all member IDs are valid users (connection not required for groups)
+        $db = db_connect();
         foreach ($memberIds as $memberId) {
-            if (! $this->connections->isConnected($userId, $memberId)) {
-                return $this->error("You must be connected with all members. User #{$memberId} is not connected.", 422);
+            $exists = $db->table('users')->where('id', $memberId)->where('is_active', 1)->countAllResults();
+            if (! $exists) {
+                return $this->error("User #{$memberId} not found.", 422);
             }
         }
 

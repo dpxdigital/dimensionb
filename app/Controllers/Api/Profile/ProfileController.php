@@ -22,21 +22,28 @@ class ProfileController extends BaseApiController
         $safe     = $model->safeUser($user);
         $withInt  = $model->withInterests($safe);
 
+        // Count real followers/following from user_follows table
+        $db = db_connect();
+        $followersCount = (int) $db->table('user_follows')->where('following_id', (int) $id)->countAllResults();
+        $followingCount = (int) $db->table('user_follows')->where('follower_id', (int) $id)->countAllResults();
+
         return $this->success([
             'id'              => (string) $withInt['id'],
             'name'            => $withInt['name'],
+            'email'           => '',
             'avatar_url'      => $withInt['avatar_url'] ?? null,
             'cover_url'       => $withInt['cover_url'] ?? null,
             'bio'             => $withInt['bio'] ?? null,
             'location'        => $withInt['location'] ?? null,
             'city'            => $withInt['city'] ?? null,
             'interests'       => $withInt['interests'] ?? [],
-            'followers_count' => (int) ($withInt['followers_count'] ?? 0),
-            'following_count' => (int) ($withInt['following_count'] ?? 0),
+            'followers_count' => $followersCount,
+            'following_count' => $followingCount,
             'listings_count'  => (int) ($withInt['listings_count'] ?? 0),
             'trust_level'     => $withInt['trust_level'] ?? null,
             'trust_label'     => $withInt['trust_label'] ?? null,
             'is_vendor'       => (bool) ($withInt['is_vendor'] ?? false),
+            'created_at'      => $withInt['created_at'] ?? date('Y-m-d H:i:s'),
         ]);
     }
 

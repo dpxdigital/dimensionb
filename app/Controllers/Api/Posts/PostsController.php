@@ -17,7 +17,8 @@ class PostsController extends BaseApiController
         $files     = $this->request->getFiles('media');
         $mediaUrls = [];
 
-        if (empty($body) && empty($files['media'])) {
+        $mediaFiles = $files['media'] ?? $files['media[]'] ?? [];
+        if (empty($body) && empty($mediaFiles)) {
             return $this->error('Post must have text or at least one media file.', 422);
         }
 
@@ -25,14 +26,17 @@ class PostsController extends BaseApiController
             return $this->error('Post body must be 2200 characters or fewer.', 422);
         }
 
-        if (! empty($files['media'])) {
+        // Support both 'media' and 'media[]' field names
+        $mediaFiles = $files['media'] ?? $files['media[]'] ?? [];
+
+        if (! empty($mediaFiles)) {
             $allowedExts = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'mp4', 'mov'];
             $videoExts   = ['mp4', 'mov'];
             $tmpDir      = WRITEPATH . 'uploads/tmp/';
             if (! is_dir($tmpDir)) mkdir($tmpDir, 0755, true);
             $s3 = new S3Uploader();
 
-            foreach ((array) $files['media'] as $file) {
+            foreach ((array) $mediaFiles as $file) {
                 if (! $file->isValid()) continue;
 
                 $ext = strtolower($file->getClientExtension() ?: $file->guessExtension() ?: '');
@@ -84,6 +88,7 @@ class PostsController extends BaseApiController
     public function index(): ResponseInterface
     {
         $cursor = (int) ($this->request->getGet('cursor') ?? 0);
+        $q      = trim((string) ($this->request->getGet('q') ?? ''));
         $limit  = 20;
         $db     = db_connect();
 
@@ -94,6 +99,7 @@ class PostsController extends BaseApiController
             ->limit($limit + 1);
 
         if ($cursor > 0) $query->where('p.id <', $cursor);
+        if ($q !== '') $query->like('p.body', $q);
 
         $rows    = $query->get()->getResultArray();
         $hasMore = count($rows) > $limit;

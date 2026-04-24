@@ -583,18 +583,19 @@ class ChatController extends BaseApiController
         $userId = $this->authUserId();
         $q      = trim((string) ($this->request->getGet('q') ?? ''));
 
-        if (strlen($q) < 2) {
-            return $this->success([], 'OK');
-        }
-
-        $rows = db_connect()
-            ->table('users')
+        $db    = db_connect();
+        $query = $db->table('users')
             ->select('id, name, avatar_url, location')
-            ->like('name', $q)
             ->where('id !=', $userId)
             ->where('is_active', 1)
-            ->limit(20)
-            ->get()->getResultArray();
+            ->orderBy('name', 'ASC')
+            ->limit(30);
+
+        if (strlen($q) >= 1) {
+            $query->like('name', $q);
+        }
+
+        $rows = $query->get()->getResultArray();
 
         $results = array_map(static fn($u) => [
             'id'         => (string) $u['id'],
