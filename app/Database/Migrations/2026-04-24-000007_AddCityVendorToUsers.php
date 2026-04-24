@@ -8,12 +8,17 @@ class AddCityVendorToUsers extends Migration
 {
     public function up(): void
     {
-        // Add city and is_vendor columns if not already present
-        $fields = [
-            'city'      => ['type' => 'VARCHAR', 'constraint' => 100, 'null' => true, 'after' => 'location'],
-            'is_vendor' => ['type' => 'TINYINT', 'constraint' => 1, 'default' => 0, 'after' => 'city'],
-        ];
-        $this->forge->addColumn('users', $fields);
+        $existing = $this->db->getFieldNames('users');
+        $fields = [];
+        if (!in_array('city', $existing)) {
+            $fields['city'] = ['type' => 'VARCHAR', 'constraint' => 100, 'null' => true, 'after' => 'location'];
+        }
+        if (!in_array('is_vendor', $existing)) {
+            $fields['is_vendor'] = ['type' => 'TINYINT', 'constraint' => 1, 'default' => 0, 'after' => 'city'];
+        }
+        if (!empty($fields)) {
+            $this->forge->addColumn('users', $fields);
+        }
     }
 
     public function down(): void
