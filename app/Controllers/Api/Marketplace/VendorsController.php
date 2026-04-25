@@ -162,6 +162,54 @@ class VendorsController extends BaseApiController
         ]);
     }
 
+    // ── PUT|POST /v1/vendors/:id/payment-settings ─────────────────────────────
+
+    public function paymentSettings($id = null): ResponseInterface
+    {
+        $userId = $this->authUserId();
+        $db     = $this->db();
+        $vendor = $db->table('vendors')->where('id', (int) $id)->where('user_id', $userId)->get()->getRowArray();
+        if (! $vendor) return $this->error('Vendor not found or not yours.', 404);
+
+        $isMultipart = str_contains($this->request->getHeaderLine('Content-Type'), 'multipart');
+        $input       = $isMultipart ? $this->request->getPost() : $this->inputJson();
+
+        $set = [
+            'stripe_enabled'      => (int) ($input['stripe_enabled'] ?? 0),
+            'paypal_enabled'      => (int) ($input['paypal_enabled'] ?? 0),
+            'flutterwave_enabled' => (int) ($input['flutterwave_enabled'] ?? 0),
+            'free_shipping'       => (int) ($input['free_shipping'] ?? 0),
+            'shipping_rate'       => (float) ($input['shipping_rate'] ?? 0),
+            'delivery_time'       => $input['delivery_time'] ?? '3-5 business days',
+            'is_activated'        => 1,
+            'updated_at'          => date('Y-m-d H:i:s'),
+        ];
+
+        // Store payment gateway keys (encrypted in production)
+        if (! empty($input['stripe_publishable_key'])) {
+            $set['stripe_publishable_key'] = trim($input['stripe_publishable_key']);
+        }
+        if (! empty($input['stripe_secret_key'])) {
+            $set['stripe_secret_key'] = trim($input['stripe_secret_key']);
+        }
+        if (! empty($input['paypal_client_id'])) {
+            $set['paypal_client_id'] = trim($input['paypal_client_id']);
+        }
+        if (! empty($input['paypal_client_secret'])) {
+            $set['paypal_client_secret'] = trim($input['paypal_client_secret']);
+        }
+        if (! empty($input['flutterwave_public_key'])) {
+            $set['flutterwave_public_key'] = trim($input['flutterwave_public_key']);
+        }
+        if (! empty($input['flutterwave_secret_key'])) {
+            $set['flutterwave_secret_key'] = trim($input['flutterwave_secret_key']);
+        }
+
+        $db->table('vendors')->where('id', (int) $id)->set($set)->update();
+
+        return $this->success(['activated' => true], 'Payment settings saved');
+    }
+
     private function formatVendor(array $row): array
     {
         return [

@@ -260,6 +260,50 @@ class AuthController extends BaseApiController
         return $this->success(['avatar_url' => $avatarUrl], 'Avatar updated');
     }
 
+    // ── POST /v1/auth/me/cover — requires AuthFilter ─────────────────────────
+
+    public function uploadCover(): ResponseInterface
+    {
+        $userId = $this->authUserId();
+        $file   = $this->request->getFile('cover');
+
+        if (! $file || ! $file->isValid()) {
+            return $this->error('No valid file uploaded.', 422);
+        }
+
+        $allowedExts = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+        if (! in_array(strtolower($file->getExtension()), $allowedExts, true)) {
+            return $this->error('Only JPEG, PNG, WebP and GIF images are allowed.', 422);
+        }
+
+        if ($file->getSize() > 10 * 1024 * 1024) {
+            return $this->error('Cover image must be under 10 MB.', 422);
+        }
+
+        $ext      = strtolower($file->getExtension());
+        $filename = 'cover_' . $userId . '_' . time() . '.' . $ext;
+        $tmpPath  = WRITEPATH . 'uploads/' . $filename;
+
+        if (! is_dir(WRITEPATH . 'uploads/')) {
+            mkdir(WRITEPATH . 'uploads/', 0755, true);
+        }
+
+        if (! $file->move(WRITEPATH . 'uploads/', $filename)) {
+            return $this->error('Upload failed.', 500);
+        }
+
+        try {
+            $s3 = new \App\Libraries\S3Uploader();
+            $coverUrl = $s3->uploadOrLocal($tmpPath, "uploads/covers/{$filename}", "image/{$ext}", 'covers');
+        } catch (\Throwable $e) {
+            return $this->error('Upload failed: ' . $e->getMessage(), 500);
+        }
+
+        $this->users->update($userId, ['cover_url' => $coverUrl]);
+
+        return $this->success(['cover_url' => $coverUrl], 'Cover photo updated');
+    }
+
     // ── POST /v1/auth/fcm-token — requires AuthFilter ─────────────────────────
 
     public function registerFcmToken(): ResponseInterface

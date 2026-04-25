@@ -60,7 +60,7 @@ class ActivityController extends BaseApiController
             ->findAll(self::PER_PAGE, $offset);
 
         return [
-            array_map([ListingModel::class, 'format'], $rows),
+            array_map(fn($r) => $this->wrapActivity($r, 'saved'), $rows),
             $total,
         ];
     }
@@ -79,7 +79,7 @@ class ActivityController extends BaseApiController
             ->findAll(self::PER_PAGE, $offset);
 
         return [
-            array_map([ListingModel::class, 'format'], $rows),
+            array_map(fn($r) => $this->wrapActivity($r, 'rsvped'), $rows),
             $total,
         ];
     }
@@ -101,8 +101,22 @@ class ActivityController extends BaseApiController
             ->findAll(self::PER_PAGE, $offset);
 
         return [
-            array_map([ListingModel::class, 'format'], $rows),
+            array_map(fn($r) => $this->wrapActivity($r, 'applied'), $rows),
             $total,
+        ];
+    }
+
+    private function wrapActivity(array $row, string $actionType): array
+    {
+        $listing = ListingModel::format($row);
+        return [
+            'id'                 => (string) $row['id'],
+            'listing_id'         => (string) $row['id'],
+            'listing_title'      => $listing['title'] ?? '',
+            'listing_image_url'  => $listing['image_url'] ?? null,
+            'listing_category'   => $listing['category'] ?? '',
+            'action_type'        => $actionType,
+            'created_at'         => $row['created_at'] ?? date('Y-m-d H:i:s'),
         ];
     }
 

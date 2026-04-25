@@ -29,6 +29,7 @@ $routes->group('v1', static function (RouteCollection $routes): void {
             $routes->get('me',          'Auth\AuthController::me');
             $routes->put('me',          'Auth\AuthController::updateMe');
             $routes->post('me/avatar',  'Auth\AuthController::uploadAvatar');
+            $routes->post('me/cover',   'Auth\AuthController::uploadCover');
             $routes->post('logout',     'Auth\AuthController::logout');
             $routes->post('fcm-token',  'Auth\AuthController::registerFcmToken');
         });
@@ -115,6 +116,9 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->post('users/(:num)/follow',          'Profile\FollowController::follow/$1');
         $routes->delete('users/(:num)/follow',        'Profile\FollowController::unfollow/$1');
 
+        // ── Chat — File upload ────────────────────────────────────────────────
+        $routes->post('chat/upload',                             'Chat\ChatController::uploadFile');
+
         // ── Chat — Conversations (specific sub-routes before wildcard :id) ──────
         $routes->get('chat/conversations',                       'Chat\ChatController::conversations');
         $routes->post('chat/conversations',                      'Chat\ChatController::startDm');
@@ -164,6 +168,9 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->get('vendors/my',                   'Marketplace\VendorsController::myStore');
         $routes->get('vendors/(:num)',               'Marketplace\VendorsController::show/$1');
         $routes->put('vendors/(:num)',               'Marketplace\VendorsController::update/$1');
+        $routes->post('vendors/(:num)',              'Marketplace\VendorsController::update/$1');
+        $routes->put('vendors/(:num)/payment-settings', 'Marketplace\VendorsController::paymentSettings/$1');
+        $routes->post('vendors/(:num)/payment-settings', 'Marketplace\VendorsController::paymentSettings/$1');
         $routes->post('vendors/(:num)/products',     'Marketplace\ProductsController::create/$1');
 
         // ── Products ──────────────────────────────────────────────────────────

@@ -607,6 +607,52 @@ class ChatController extends BaseApiController
         return $this->success($results);
     }
 
+    // ── POST /v1/chat/upload ─────────────────────────────────────────────────────
+
+    public function uploadFile(): ResponseInterface
+    {
+        $file = $this->request->getFile('file');
+        if (! $file || ! $file->isValid()) {
+            return $this->error('No valid file uploaded.', 422);
+        }
+
+        $allowedMime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+        $blocked     = ['exe', 'apk', 'sh', 'bat', 'cmd', 'js', 'php'];
+        $ext         = strtolower($file->getExtension());
+
+        if (in_array($ext, $blocked, true)) {
+            return $this->error('File type not allowed.', 422);
+        }
+        if ($file->getSize() > 10 * 1024 * 1024) {
+            return $this->error('File exceeds 10 MB limit.', 422);
+        }
+
+        $userId   = $this->authUserId();
+        $filename = 'chat_' . $userId . '_' . time() . '.' . $ext;
+        $tmpPath  = WRITEPATH . 'uploads/' . $filename;
+
+        if (! is_dir(WRITEPATH . 'uploads/')) {
+            mkdir(WRITEPATH . 'uploads/', 0755, true);
+        }
+        $file->move(WRITEPATH . 'uploads/', $filename);
+
+        $mime = $file->getMimeType() ?? 'application/octet-stream';
+        try {
+            $s3  = new \App\Libraries\S3Uploader();
+            $url = $s3->uploadOrLocal($tmpPath, "uploads/chat/{$filename}", $mime, 'chat');
+        } catch (\Throwable $e) {
+            return $this->error('Upload failed: ' . $e->getMessage(), 500);
+        }
+
+        return $this->success([
+            'url'       => $url,
+            'file_name' => $filename,
+            'file_size' => filesize($tmpPath),
+            'mime_type' => $mime,
+            'type'      => str_starts_with($mime, 'image/') ? 'image' : 'file',
+        ], 'File uploaded');
+    }
+
     private function formatConversationWithMembers(array $conv, array $members): array
     {
         return [

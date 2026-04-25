@@ -87,6 +87,7 @@ class PostsController extends BaseApiController
 
     public function index(): ResponseInterface
     {
+        $userId = $this->authUserId();
         $cursor = (int) ($this->request->getGet('cursor') ?? 0);
         $q      = trim((string) ($this->request->getGet('q') ?? ''));
         $limit  = 20;
@@ -106,10 +107,23 @@ class PostsController extends BaseApiController
         if ($hasMore) array_pop($rows);
         $nextCursor = $hasMore && ! empty($rows) ? end($rows)['id'] : null;
 
-        return $this->success(
-            array_map([$this, 'formatPost'], $rows),
-            'OK', 200, ['next_cursor' => $nextCursor]
-        );
+        // Get followed user IDs for is_following flag
+        $followedIds = [];
+        try {
+            $follows = $db->table('follows')
+                ->select('following_id')
+                ->where('follower_id', $userId)
+                ->get()->getResultArray();
+            $followedIds = array_map('intval', array_column($follows, 'following_id'));
+        } catch (\Throwable $_) {}
+
+        $formatted = array_map(function ($row) use ($followedIds) {
+            $post = $this->formatPost($row);
+            $post['is_following'] = in_array((int) $row['user_id'], $followedIds, true);
+            return $post;
+        }, $rows);
+
+        return $this->success($formatted, 'OK', 200, ['next_cursor' => $nextCursor]);
     }
 
     // ── GET /v1/posts/:id/comments ────────────────────────────────────────────
