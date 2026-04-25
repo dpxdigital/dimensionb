@@ -114,24 +114,21 @@ class MessageModel extends Model
     {
         $isDeleted = (bool) $row['is_deleted'];
         return [
-            'id'             => (int) $row['id'],
-            'conversationId' => (int) $row['conversation_id'],
-            'senderId'       => (int) $row['sender_id'],
-            'type'           =>       $row['type'],
-            'body'           => $isDeleted ? 'This message was deleted' : $row['body'],
-            'fileUrl'        => $isDeleted ? null : ($row['file_url'] ?? null),
-            'fileName'       => $isDeleted ? null : ($row['file_name'] ?? null),
-            'fileSize'       => isset($row['file_size']) ? (int) $row['file_size'] : null,
-            'listingId'      => isset($row['listing_id']) ? (int) $row['listing_id'] : null,
-            'isDeleted'      => $isDeleted,
-            'deletedForAll'  => (bool) $row['deleted_for_all'],
-            'createdAt'      =>        $row['created_at'],
-            'sender'         => [
-                'id'        => (int) ($row['sender_user_id'] ?? $row['sender_id']),
-                'name'      =>       $row['sender_name']   ?? null,
-                'avatarUrl' =>       $row['sender_avatar'] ?? null,
-            ],
-            'listingPreview' => $isDeleted ? null : $listingPreview,
+            'id'              => (string) $row['id'],
+            'conversation_id' => (string) $row['conversation_id'],
+            'sender_id'       => (string) $row['sender_id'],
+            'sender_name'     =>          $row['sender_name']   ?? null,
+            'sender_avatar'   =>          $row['sender_avatar'] ?? null,
+            'type'            =>          $row['type'],
+            'body'            => $isDeleted ? 'This message was deleted' : ($row['body'] ?? null),
+            'file_url'        => $isDeleted ? null : ($row['file_url'] ?? null),
+            'file_name'       => $isDeleted ? null : ($row['file_name'] ?? null),
+            'file_size'       => isset($row['file_size']) ? (int) $row['file_size'] : null,
+            'listing_id'      => isset($row['listing_id']) ? (string) $row['listing_id'] : null,
+            'is_deleted'      => $isDeleted,
+            'deleted_for_all' => (bool) $row['deleted_for_all'],
+            'reactions'       => [],
+            'created_at'      =>        $row['created_at'],
         ];
     }
 }
