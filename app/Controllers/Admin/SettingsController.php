@@ -11,7 +11,7 @@ class SettingsController extends BaseAdminController
         }
 
         $db         = db_connect();
-        $categories = $db->table('categories')->orderBy('display_order')->get()->getResultArray();
+        $categories = $db->table('categories')->orderBy('sort_order')->get()->getResultArray();
 
         // Read last cron run times from cache or a simple log file
         $cronStatus = [
@@ -34,7 +34,6 @@ class SettingsController extends BaseAdminController
         $name     = trim($this->request->getPost('name') ?? '');
         $slug     = trim($this->request->getPost('slug') ?? '');
         $iconName = trim($this->request->getPost('icon_name') ?? '');
-        $isActive = (int) (bool) $this->request->getPost('is_active');
 
         if (empty($name) || empty($slug)) {
             return $this->jsonResponse(['error' => 'Name and slug are required.'], 422);
@@ -46,7 +45,6 @@ class SettingsController extends BaseAdminController
                 'name'      => $name,
                 'slug'      => $slug,
                 'icon_name' => $iconName ?: null,
-                'is_active' => $isActive,
             ]);
             $this->audit('category_updated', 'category', $id, $name);
         } else {
@@ -54,7 +52,6 @@ class SettingsController extends BaseAdminController
                 'name'      => $name,
                 'slug'      => $slug,
                 'icon_name' => $iconName ?: null,
-                'is_active' => 1,
             ]);
             $id = (int) $db->insertID();
             $this->audit('category_created', 'category', $id, $name);

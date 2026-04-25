@@ -14,7 +14,7 @@ class UsersController extends BaseAdminController
         $offset = ($page - 1) * self::PER_PAGE;
 
         $query = $db->table('users u')
-            ->select('u.id, u.name, u.email, u.phone, u.location, u.is_active, u.created_at,
+            ->select('u.id, u.name, u.email, u.phone, u.location, u.avatar_url, u.is_active, u.created_at,
                       (SELECT COUNT(*) FROM listing_saves WHERE user_id = u.id) AS save_count,
                       (SELECT COUNT(*) FROM listing_rsvps WHERE user_id = u.id) AS rsvp_count,
                       (SELECT COUNT(*) FROM submissions WHERE user_id = u.id) AS submission_count');

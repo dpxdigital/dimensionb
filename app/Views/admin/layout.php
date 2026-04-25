@@ -88,8 +88,12 @@
                         <i class="nav-icon fas fa-shield-alt"></i>
                         <p>Moderation
                             <?php
-                            $pendingCount = db_connect()->table('submissions')->where('status','pending')->countAllResults()
-                                          + db_connect()->table('moderation_queue')->where('status','pending')->countAllResults();
+                            try {
+                                $pendingCount = db_connect()->table('submissions')->where('status','pending')->countAllResults()
+                                              + db_connect()->table('moderation_queue')->where('status','pending')->countAllResults();
+                            } catch (\Throwable $e) {
+                                $pendingCount = 0;
+                            }
                             if ($pendingCount > 0): ?>
                             <span class="badge badge-danger right"><?= $pendingCount ?></span>
                             <?php endif; ?>

@@ -16,7 +16,7 @@ class NotificationsController extends BaseAdminController
             ->limit(50)
             ->get()->getResultArray();
 
-        $categories = $db->table('categories')->where('is_active', 1)->orderBy('name')->get()->getResultArray();
+        $categories = $db->table('categories')->orderBy('name')->get()->getResultArray();
 
         return $this->renderView('admin/notifications/index', compact('history', 'categories'));
     }

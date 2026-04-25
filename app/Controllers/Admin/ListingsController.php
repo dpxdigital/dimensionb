@@ -20,12 +20,12 @@ class ListingsController extends BaseAdminController
             ->select('l.id, l.title, l.trust_level, l.trust_label, l.status, l.date, l.created_at,
                       c.name AS category_name, o.name AS org_name, u.name AS created_by_name')
             ->join('categories c', 'c.id = l.category_id', 'left')
-            ->join('organisations o', 'o.id = l.org_id', 'left')
+            ->join('organizations o', 'o.id = l.org_id', 'left')
             ->join('users u', 'u.id = l.created_by', 'left');
 
         $countQuery = $db->table('listings l')
             ->join('categories c', 'c.id = l.category_id', 'left')
-            ->join('organisations o', 'o.id = l.org_id', 'left');
+            ->join('organizations o', 'o.id = l.org_id', 'left');
 
         if ($search !== '') {
             $query->groupStart()->like('l.title', $search)->orLike('o.name', $search)->groupEnd();
@@ -37,7 +37,7 @@ class ListingsController extends BaseAdminController
 
         $total     = $countQuery->countAllResults();
         $listings  = $query->orderBy('l.created_at', 'DESC')->limit(self::PER_PAGE, $offset)->get()->getResultArray();
-        $categories = $db->table('categories')->where('is_active', 1)->orderBy('name')->get()->getResultArray();
+        $categories = $db->table('categories')->orderBy('name')->get()->getResultArray();
         $lastPage  = (int) ceil($total / self::PER_PAGE);
 
         return $this->renderView('admin/listings/index', compact(
@@ -52,7 +52,7 @@ class ListingsController extends BaseAdminController
         $listing = $db->table('listings l')
             ->select('l.*, c.name AS category_name, o.name AS org_name, u.name AS created_by_name')
             ->join('categories c', 'c.id = l.category_id', 'left')
-            ->join('organisations o', 'o.id = l.org_id', 'left')
+            ->join('organizations o', 'o.id = l.org_id', 'left')
             ->join('users u', 'u.id = l.created_by', 'left')
             ->where('l.id', (int) $id)
             ->get()->getRowArray();
@@ -96,7 +96,7 @@ class ListingsController extends BaseAdminController
             return $this->jsonResponse(['error' => 'Listing not found.'], 404);
         }
 
-        $newStatus = $listing['status'] === 'active' ? 'inactive' : 'active';
+        $newStatus = $listing['status'] === 'approved' ? 'rejected' : 'approved';
         $db->table('listings')->where('id', (int) $id)->update(['status' => $newStatus]);
         $this->audit("listing_{$newStatus}", 'listing', (int) $id, $listing['title']);
 

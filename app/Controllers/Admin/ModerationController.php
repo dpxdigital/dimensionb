@@ -6,79 +6,46 @@ use App\Libraries\FCMNotificationService;
 
 class ModerationController extends BaseAdminController
 {
-    private const PER_PAGE = 20;
-
     public function index()
     {
-        $db   = db_connect();
-        $tab  = $this->request->getGet('tab') ?? 'submissions';
-        $page = max(1, (int) ($this->request->getGet('page') ?? 1));
-        $offset = ($page - 1) * self::PER_PAGE;
+        $db = db_connect();
 
-        $items = [];
-        $total = 0;
+        $pendingSubmissions = $db->table('submissions s')
+            ->select('s.*, u.name AS user_name, u.email AS user_email')
+            ->join('users u', 'u.id = s.user_id', 'left')
+            ->where('s.status', 'pending')
+            ->orderBy('s.created_at', 'ASC')
+            ->get()->getResultArray();
 
-        switch ($tab) {
-            case 'submissions':
-                $total = $db->table('submissions')->where('status', 'pending')->countAllResults();
-                $items = $db->table('submissions s')
-                    ->select('s.*, u.name AS user_name, u.email AS user_email')
-                    ->join('users u', 'u.id = s.user_id', 'left')
-                    ->where('s.status', 'pending')
-                    ->orderBy('s.created_at', 'ASC')
-                    ->limit(self::PER_PAGE, $offset)
-                    ->get()->getResultArray();
-                break;
+        $reportedListings = $db->table('moderation_queue mq')
+            ->select('mq.*, u.name AS reporter_name, l.title AS reference_title')
+            ->join('users u', 'u.id = mq.reported_by', 'left')
+            ->join('listings l', 'l.id = mq.reference_id', 'left')
+            ->where('mq.reference_type', 'listing')
+            ->where('mq.status', 'pending')
+            ->orderBy('mq.created_at', 'ASC')
+            ->get()->getResultArray();
 
-            case 'listings':
-                $total = $db->table('moderation_queue')->where('reference_type', 'listing')->where('status', 'pending')->countAllResults();
-                $items = $db->table('moderation_queue mq')
-                    ->select('mq.*, u.name AS reporter_name, l.title AS content_title')
-                    ->join('users u', 'u.id = mq.reported_by', 'left')
-                    ->join('listings l', 'l.id = mq.reference_id', 'left')
-                    ->where('mq.reference_type', 'listing')
-                    ->where('mq.status', 'pending')
-                    ->orderBy('mq.created_at', 'ASC')
-                    ->limit(self::PER_PAGE, $offset)
-                    ->get()->getResultArray();
-                break;
+        $reportedUsers = $db->table('moderation_queue mq')
+            ->select('mq.*, u.name AS reporter_name, tu.name AS reference_title')
+            ->join('users u', 'u.id = mq.reported_by', 'left')
+            ->join('users tu', 'tu.id = mq.reference_id', 'left')
+            ->where('mq.reference_type', 'user')
+            ->where('mq.status', 'pending')
+            ->orderBy('mq.created_at', 'ASC')
+            ->get()->getResultArray();
 
-            case 'users':
-                $total = $db->table('moderation_queue')->where('reference_type', 'user')->where('status', 'pending')->countAllResults();
-                $items = $db->table('moderation_queue mq')
-                    ->select('mq.*, u.name AS reporter_name, tu.name AS content_title')
-                    ->join('users u', 'u.id = mq.reported_by', 'left')
-                    ->join('users tu', 'tu.id = mq.reference_id', 'left')
-                    ->where('mq.reference_type', 'user')
-                    ->where('mq.status', 'pending')
-                    ->orderBy('mq.created_at', 'ASC')
-                    ->limit(self::PER_PAGE, $offset)
-                    ->get()->getResultArray();
-                break;
+        $reportedConversations = $db->table('moderation_queue mq')
+            ->select('mq.*, u.name AS reporter_name')
+            ->join('users u', 'u.id = mq.reported_by', 'left')
+            ->where('mq.reference_type', 'conversation')
+            ->where('mq.status', 'pending')
+            ->orderBy('mq.created_at', 'ASC')
+            ->get()->getResultArray();
 
-            case 'conversations':
-                $total = $db->table('moderation_queue')->where('reference_type', 'conversation')->where('status', 'pending')->countAllResults();
-                $items = $db->table('moderation_queue mq')
-                    ->select('mq.*, u.name AS reporter_name, c.type AS content_title')
-                    ->join('users u', 'u.id = mq.reported_by', 'left')
-                    ->join('conversations c', 'c.id = mq.reference_id', 'left')
-                    ->where('mq.reference_type', 'conversation')
-                    ->where('mq.status', 'pending')
-                    ->orderBy('mq.created_at', 'ASC')
-                    ->limit(self::PER_PAGE, $offset)
-                    ->get()->getResultArray();
-                break;
-        }
-
-        $lastPage = (int) ceil($total / self::PER_PAGE);
-        $counts   = [
-            'submissions'   => $db->table('submissions')->where('status', 'pending')->countAllResults(),
-            'listings'      => $db->table('moderation_queue')->where('reference_type', 'listing')->where('status', 'pending')->countAllResults(),
-            'users'         => $db->table('moderation_queue')->where('reference_type', 'user')->where('status', 'pending')->countAllResults(),
-            'conversations' => $db->table('moderation_queue')->where('reference_type', 'conversation')->where('status', 'pending')->countAllResults(),
-        ];
-
-        return $this->renderView('admin/moderation/index', compact('items', 'tab', 'total', 'page', 'lastPage', 'counts'));
+        return $this->renderView('admin/moderation/index', compact(
+            'pendingSubmissions', 'reportedListings', 'reportedUsers', 'reportedConversations'
+        ));
     }
 
     public function approveSubmission($id)
@@ -103,7 +70,7 @@ class ModerationController extends BaseAdminController
             'date'        => $submission['date'],
             'location'    => $submission['location'],
             'source_url'  => $submission['source_url'],
-            'status'      => 'active',
+            'status'      => 'approved',
             'created_by'  => $submission['user_id'],
             'created_at'  => date('Y-m-d H:i:s'),
             'updated_at'  => date('Y-m-d H:i:s'),
@@ -161,7 +128,7 @@ class ModerationController extends BaseAdminController
                     $this->audit('report_user_suspended', 'user', (int) $report['reference_id']);
                     break;
                 case 'listing':
-                    $db->table('listings')->where('id', $report['reference_id'])->update(['status' => 'inactive']);
+                    $db->table('listings')->where('id', $report['reference_id'])->update(['status' => 'rejected']);
                     $this->audit('report_listing_deactivated', 'listing', (int) $report['reference_id']);
                     break;
                 case 'conversation':
