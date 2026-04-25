@@ -610,16 +610,16 @@ class ChatController extends BaseApiController
     private function formatConversationWithMembers(array $conv, array $members): array
     {
         return [
-            'id'        => (int) $conv['id'],
-            'type'      =>       $conv['type'],
-            'name'      =>       $conv['name'] ?? null,
-            'avatarUrl' =>       $conv['avatar_url'] ?? null,
-            'createdAt' =>       $conv['created_at'],
-            'members'   => array_map(static fn($m) => [
-                'id'        => (int) $m['id'],
-                'name'      =>       $m['name'],
-                'avatarUrl' =>       $m['avatar_url'] ?? null,
-                'isAdmin'   => (bool) ($m['is_admin'] ?? false),
+            'id'         => (string) $conv['id'],
+            'type'       =>          $conv['type'],
+            'name'       =>          $conv['name'] ?? null,
+            'avatar_url' =>          $conv['avatar_url'] ?? null,
+            'created_at' =>          $conv['created_at'],
+            'members'    => array_map(static fn($m) => [
+                'id'         => (string) $m['id'],
+                'name'       =>          $m['name'],
+                'avatar_url' =>          $m['avatar_url'] ?? null,
+                'is_admin'   => (bool)   ($m['is_admin'] ?? false),
             ], $members),
         ];
     }

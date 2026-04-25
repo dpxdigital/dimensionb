@@ -42,8 +42,9 @@ class ProfileTabsController extends BaseApiController
         $db     = db_connect();
 
         $rows = $db->table('listing_saves ls')
-            ->select('l.id, l.title, l.org_name, l.category, l.image_url, l.date, l.trust_level, l.trust_label')
+            ->select('l.id, l.title, l.org_name, c.slug AS category, l.cover_url AS image_url, l.date, l.trust_level, l.trust_label')
             ->join('listings l', 'l.id = ls.listing_id')
+            ->join('categories c', 'c.id = l.category_id', 'left')
             ->where('ls.user_id', $userId)
             ->orderBy('ls.created_at', 'DESC')
             ->limit(50)

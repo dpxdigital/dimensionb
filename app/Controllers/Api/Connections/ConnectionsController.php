@@ -254,17 +254,16 @@ class ConnectionsController extends BaseApiController
             return ['listing', (int) $shared['listing_id']];
         }
 
-        // Both interested in the same category?
-        $sharedCat = $db->table('user_interests ia')
-            ->select('ia.category_id')
-            ->join('user_interests ib', 'ib.category_id = ia.category_id')
+        // Both interested in the same area?
+        $sharedInterest = $db->table('user_interests ia')
+            ->select('ia.interest')
+            ->join('user_interests ib', "ib.interest = ia.interest AND ib.user_id = {$userBId}", 'inner')
             ->where('ia.user_id', $userAId)
-            ->where('ib.user_id', $userBId)
             ->limit(1)
             ->get()->getRowArray();
 
-        if ($sharedCat) {
-            return ['category', (int) $sharedCat['category_id']];
+        if ($sharedInterest) {
+            return ['interest', null];
         }
 
         return [null, null];

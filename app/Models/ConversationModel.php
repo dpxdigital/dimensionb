@@ -136,33 +136,21 @@ class ConversationModel extends Model
     {
         $lastMessage = null;
         if (! empty($row['last_msg_id'])) {
-            $body = (bool) ($row['last_msg_is_deleted'] ?? false)
+            $lastMessage = (bool) ($row['last_msg_is_deleted'] ?? false)
                 ? 'This message was deleted'
                 : ($row['last_msg_body'] ?? $row['last_msg_file_name'] ?? '');
-
-            $lastMessage = [
-                'id'        => (int) $row['last_msg_id'],
-                'type'      => $row['last_msg_type'],
-                'body'      => $body,
-                'createdAt' => $row['last_msg_created_at'],
-                'sender'    => [
-                    'id'        => (int) ($row['last_sender_id'] ?? 0),
-                    'name'      => $row['last_sender_name'] ?? null,
-                    'avatarUrl' => $row['last_sender_avatar'] ?? null,
-                ],
-            ];
         }
 
         return [
-            'id'            => (int) $row['id'],
-            'type'          =>       $row['type'],
-            'name'          =>       $row['name'] ?? null,
-            'avatarUrl'     =>       $row['avatar_url'] ?? null,
-            'lastMessageAt' =>       $row['last_message_at'] ?? null,
-            'isMuted'       => (bool) ($row['is_muted'] ?? false),
-            'unreadCount'   => (int)  ($row['unread_count'] ?? 0),
-            'lastMessage'   =>        $lastMessage,
-            'createdAt'     =>        $row['created_at'],
+            'id'              => (string) $row['id'],
+            'type'            =>          $row['type'],
+            'name'            =>          $row['name'] ?? null,
+            'avatar_url'      =>          $row['avatar_url'] ?? null,
+            'last_message_at' =>          $row['last_message_at'] ?? null,
+            'is_muted'        => (bool)   ($row['is_muted'] ?? false),
+            'unread_count'    => (int)    ($row['unread_count'] ?? 0),
+            'last_message'    =>          $lastMessage,
+            'created_at'      =>          $row['created_at'],
         ];
     }
 }
