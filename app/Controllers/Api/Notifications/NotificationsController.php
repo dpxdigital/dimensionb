@@ -86,14 +86,15 @@ class NotificationsController extends BaseApiController
     public static function formatRow(array $row): array
     {
         return [
-            'id'            => (int)  $row['id'],
-            'type'          =>        $row['type'],
-            'title'         =>        $row['title'],
-            'body'          =>        $row['body'],
-            'referenceId'   => isset($row['reference_id']) ? (int) $row['reference_id'] : null,
-            'referenceType' =>        $row['reference_type'] ?? null,
-            'isRead'        => (bool) $row['is_read'],
-            'createdAt'     =>        $row['created_at'],
+            'id'             => (string) $row['id'],
+            'user_id'        => (string) $row['user_id'],
+            'type'           =>          $row['type'],
+            'title'          =>          $row['title'],
+            'body'           =>          $row['body'],
+            'reference_id'   => isset($row['reference_id']) ? (string) $row['reference_id'] : null,
+            'reference_type' =>          $row['reference_type'] ?? null,
+            'is_read'        => (bool)   $row['is_read'],
+            'created_at'     =>          $row['created_at'],
         ];
     }
 }
