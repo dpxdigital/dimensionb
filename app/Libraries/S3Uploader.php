@@ -48,12 +48,11 @@ class S3Uploader
         $host = "{$this->bucket}.s3.{$this->region}.amazonaws.com";
         $url  = "https://{$host}/{$s3Key}";
 
-        // Canonical headers (sorted lowercase)
+        // Canonical headers (sorted lowercase) — no x-amz-acl, bucket policy handles public reads
         $headers = [
             'content-length' => $contentLen,
             'content-type'   => $mimeType,
             'host'           => $host,
-            'x-amz-acl'      => 'public-read',
             'x-amz-content-sha256' => $bodyHash,
             'x-amz-date'     => $datetime,
         ];
@@ -94,7 +93,6 @@ class S3Uploader
             "Authorization: {$authHeader}",
             "Content-Length: {$contentLen}",
             "Content-Type: {$mimeType}",
-            "x-amz-acl: public-read",
             "x-amz-content-sha256: {$bodyHash}",
             "x-amz-date: {$datetime}",
         ];
