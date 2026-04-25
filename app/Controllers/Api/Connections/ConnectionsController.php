@@ -35,7 +35,7 @@ class ConnectionsController extends BaseApiController
             ->countAllResults();
 
         $rows = $db->table('connections c')
-            ->select('c.id, c.context_type, c.context_id, c.created_at,
+            ->select('c.id, c.receiver_id, c.status, c.context_type, c.context_id, c.created_at,
                       u.id AS requester_id, u.name AS requester_name,
                       u.avatar_url AS requester_avatar, u.location AS requester_location')
             ->join('users u', 'u.id = c.requester_id', 'inner')
@@ -276,16 +276,19 @@ class ConnectionsController extends BaseApiController
             $context = $this->resolveContext($row['context_type'], (int) $row['context_id']);
         }
 
+        $contextLabel = $context ? ($context['label'] ?? null) : null;
+
         return [
-            'id'        => (int) $row['id'],
-            'createdAt' =>       $row['created_at'],
-            'context'   =>       $context,
-            'requester' => [
-                'id'        => (int) $row['requester_id'],
-                'name'      =>       $row['requester_name'],
-                'avatarUrl' =>       $row['requester_avatar'],
-                'location'  =>       $row['requester_location'],
-            ],
+            'id'              => (string) $row['id'],
+            'requester_id'    => (string) $row['requester_id'],
+            'receiver_id'     => (string) $row['receiver_id'],
+            'status'          =>          $row['status'] ?? 'pending',
+            'context_type'    =>          $row['context_type'] ?? null,
+            'context_id'      =>          isset($row['context_id']) ? (string) $row['context_id'] : null,
+            'requester_name'  =>          $row['requester_name'],
+            'requester_avatar' =>         $row['requester_avatar'] ?? null,
+            'context_label'   =>          $contextLabel,
+            'created_at'      =>          $row['created_at'],
         ];
     }
 
