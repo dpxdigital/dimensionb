@@ -112,6 +112,64 @@ class PostsController extends BaseApiController
         );
     }
 
+    // ── GET /v1/posts/:id/comments ────────────────────────────────────────────
+
+    public function comments($id = null): ResponseInterface
+    {
+        $db   = db_connect();
+        $rows = $db->table('post_comments pc')
+            ->select('pc.*, u.name AS user_name, u.avatar_url')
+            ->join('users u', 'u.id = pc.user_id')
+            ->where('pc.post_id', (int) $id)
+            ->orderBy('pc.created_at', 'DESC')
+            ->limit(50)
+            ->get()->getResultArray();
+
+        return $this->success(array_map(static fn($r) => [
+            'id'         => (string) $r['id'],
+            'post_id'    => (string) $r['post_id'],
+            'user_id'    => (string) $r['user_id'],
+            'user_name'  => $r['user_name'] ?? '',
+            'avatar_url' => $r['avatar_url'] ?? null,
+            'body'       => $r['body'],
+            'created_at' => $r['created_at'],
+        ], $rows));
+    }
+
+    // ── POST /v1/posts/:id/comments ───────────────────────────────────────────
+
+    public function addComment($id = null): ResponseInterface
+    {
+        $userId = $this->authUserId();
+        $input  = $this->inputJson();
+        $body   = trim((string) ($input['body'] ?? ''));
+
+        if ($body === '') return $this->error('Comment body is required.', 422);
+
+        $db  = db_connect();
+        $now = date('Y-m-d H:i:s');
+        $db->table('post_comments')->insert([
+            'post_id'    => (int) $id,
+            'user_id'    => $userId,
+            'body'       => $body,
+            'created_at' => $now,
+            'updated_at' => $now,
+        ]);
+        $commentId = $db->insertID();
+
+        $user = $db->table('users')->select('name, avatar_url')->where('id', $userId)->get()->getRowArray();
+
+        return $this->success([
+            'id'         => (string) $commentId,
+            'post_id'    => (string) $id,
+            'user_id'    => (string) $userId,
+            'user_name'  => $user['name'] ?? '',
+            'avatar_url' => $user['avatar_url'] ?? null,
+            'body'       => $body,
+            'created_at' => $now,
+        ], 'Comment added', 201);
+    }
+
     private function formatPost(array $row): array
     {
         return [

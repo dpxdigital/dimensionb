@@ -77,8 +77,10 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->put('live/(:num)',               'Live\LiveController::update/$1');
 
         // ── Posts ─────────────────────────────────────────────────────────────
-        $routes->get('posts',   'Posts\PostsController::index');
-        $routes->post('posts',  'Posts\PostsController::create');
+        $routes->get('posts',                   'Posts\PostsController::index');
+        $routes->post('posts',                  'Posts\PostsController::create');
+        $routes->get('posts/(:num)/comments',   'Posts\PostsController::comments/$1');
+        $routes->post('posts/(:num)/comments',  'Posts\PostsController::addComment/$1');
 
         // ── Profile tabs ──────────────────────────────────────────────────────
         $routes->get('profile/posts',    'Profile\ProfileTabsController::posts');

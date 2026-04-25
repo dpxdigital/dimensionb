@@ -307,16 +307,18 @@ class GroupController extends BaseApiController
     private function formatGroupWithMembers(array $conv, array $members): array
     {
         return [
-            'id'        => (int) $conv['id'],
-            'type'      =>       $conv['type'],
-            'name'      =>       $conv['name'],
-            'avatarUrl' =>       $conv['avatar_url'] ?? null,
-            'createdAt' =>       $conv['created_at'],
-            'members'   => array_map(static fn($m) => [
-                'id'        => (int) $m['id'],
-                'name'      =>       $m['name'],
-                'avatarUrl' =>       $m['avatar_url'] ?? null,
-                'isAdmin'   => (bool) ($m['is_admin'] ?? false),
+            'id'           => (string) $conv['id'],
+            'type'         =>          $conv['type'],
+            'name'         =>          $conv['name'],
+            'avatar_url'   =>          $conv['avatar_url'] ?? null,
+            'created_at'   =>          $conv['created_at'],
+            'unread_count' => 0,
+            'member_count' => count($members),
+            'members'      => array_map(static fn($m) => [
+                'id'         => (string) $m['id'],
+                'name'       =>          $m['name'],
+                'avatar_url' =>          $m['avatar_url'] ?? null,
+                'is_admin'   => (bool) ($m['is_admin'] ?? false),
             ], $members),
         ];
     }
