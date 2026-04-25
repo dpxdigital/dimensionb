@@ -245,4 +245,20 @@ $routes->group('manager', ['filter' => 'adminauth'], static function (RouteColle
     $routes->post('settings/category/save',     'SettingsController::saveCategory');
     $routes->post('settings/jwt/rotate',        'SettingsController::rotateJwt');
     $routes->get( 'settings/env',               'SettingsController::envVars');
+
+    // Marketplace management
+    $routes->get( 'marketplace',                              'MarketplaceController::index');
+    $routes->get( 'marketplace/vendors/(:num)',               'MarketplaceController::showVendor/$1');
+    $routes->post('marketplace/vendors/(:num)/toggle',        'MarketplaceController::toggleVendor/$1');
+    $routes->get( 'marketplace/products',                     'MarketplaceController::products');
+    $routes->post('marketplace/products/(:num)/toggle',       'MarketplaceController::toggleProduct/$1');
+    $routes->get( 'marketplace/orders',                       'MarketplaceController::orders');
+    $routes->post('marketplace/orders/(:num)/status',         'MarketplaceController::updateOrderStatus/$1');
+
+    // Admin user management (super_admin only)
+    $routes->get( 'admin-users',                              'AdminUsersController::index');
+    $routes->get( 'admin-users/create',                       'AdminUsersController::create');
+    $routes->post('admin-users/create',                       'AdminUsersController::store');
+    $routes->post('admin-users/(:num)/toggle',                'AdminUsersController::toggleStatus/$1');
+    $routes->post('admin-users/(:num)/delete',                'AdminUsersController::delete/$1');
 });

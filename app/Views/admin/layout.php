@@ -108,6 +108,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="/manager/marketplace" class="nav-link <?= str_contains(current_url(), '/manager/marketplace') ? 'active' : '' ?>">
+                        <i class="nav-icon fas fa-store"></i><p>Marketplace</p>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="/manager/notifications" class="nav-link <?= str_contains(current_url(), '/manager/notifications') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-bell"></i><p>Notifications</p>
                     </a>
@@ -120,6 +125,11 @@
                 <li class="nav-item">
                     <a href="/manager/settings" class="nav-link <?= str_contains(current_url(), '/manager/settings') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-cog"></i><p>Settings</p>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/manager/admin-users" class="nav-link <?= str_contains(current_url(), '/manager/admin-users') ? 'active' : '' ?>">
+                        <i class="nav-icon fas fa-user-shield"></i><p>Admin Users</p>
                     </a>
                 </li>
                 <?php endif; ?>
