@@ -57,8 +57,10 @@ class ModerationController extends BaseAdminController
             return $this->jsonResponse(['error' => 'Not found.'], 404);
         }
 
-        $trustLevel = $this->request->getPost('trust_level') ?? 'community_submitted';
-        $trustLabel = trim($this->request->getPost('trust_label') ?? 'Community Submitted');
+        // Accept both JSON body (fetch API) and form POST
+        $body       = $this->request->getJSON(true) ?? [];
+        $trustLevel = $body['trust_level'] ?? $this->request->getPost('trust_level') ?? 'community_submitted';
+        $trustLabel = trim($body['trust_label'] ?? $this->request->getPost('trust_label') ?? 'Community Submitted');
 
         // Move to listings
         $db->table('listings')->insert([

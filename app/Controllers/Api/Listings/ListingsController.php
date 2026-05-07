@@ -168,7 +168,7 @@ class ListingsController extends BaseApiController
             ->where('listing_id', $id)->where('is_deleted', 0)->countAllResults();
 
         $rows = $db->table('listing_comments lc')
-            ->select('lc.id, lc.body, lc.created_at, u.id AS user_id, u.name AS user_name, u.avatar_url')
+            ->select('lc.id, lc.listing_id, lc.body, lc.created_at, u.id AS user_id, u.name AS user_name, u.avatar_url')
             ->join('users u', 'u.id = lc.user_id')
             ->where('lc.listing_id', $id)
             ->where('lc.is_deleted', 0)

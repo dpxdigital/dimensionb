@@ -131,34 +131,42 @@
 
 <?= $this->section('scripts') ?>
 <script>
+// Use site_url() base so the path resolves correctly under /api/
+const BASE = '<?= rtrim(site_url(), '/') ?>';
+
+function adminPost(url, data) {
+    return fetch(BASE + url, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+        body: data ? JSON.stringify(data) : undefined,
+    }).then(r => r.json());
+}
+
 function approveSubmission(id, btn) {
     const row = document.getElementById(`sub-${id}`);
     const trust = row.querySelector('.trust-select').value;
-    fetch(`/manager/moderation/submissions/${id}/approve`, {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trust_level: trust })
-    }).then(r => r.json()).then(d => {
-        if (d.success) row.remove(); else alert(d.error);
-    });
+    btn.disabled = true;
+    adminPost(`/manager/moderation/submissions/${id}/approve`, { trust_level: trust })
+        .then(d => { if (d.success) row.remove(); else { alert(d.error || 'Failed'); btn.disabled = false; } })
+        .catch(() => { alert('Network error'); btn.disabled = false; });
 }
+
 function rejectSubmission(id) {
     const reason = prompt('Rejection reason (optional):') ?? '';
-    fetch(`/manager/moderation/submissions/${id}/reject`, {
-        method: 'POST',
-        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reason })
-    }).then(r => r.json()).then(d => {
-        if (d.success) document.getElementById(`sub-${id}`).remove(); else alert(d.error);
-    });
+    const btn = document.querySelector(`#sub-${id} .btn-danger`);
+    if (btn) btn.disabled = true;
+    adminPost(`/manager/moderation/submissions/${id}/reject`, { reason })
+        .then(d => { if (d.success) document.getElementById(`sub-${id}`).remove(); else { alert(d.error || 'Failed'); if (btn) btn.disabled = false; } })
+        .catch(() => { alert('Network error'); if (btn) btn.disabled = false; });
 }
+
 function resolveReport(id) {
-    fetch(`/manager/moderation/reports/${id}/resolve`, {
-        method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    }).then(r => r.json()).then(d => {
-        if (d.success) { ['', '-u-', '-c-'].forEach(p => { const el = document.getElementById(`rpt${p}${id}`); if (el) el.remove(); }); }
-        else alert(d.error);
-    });
+    adminPost(`/manager/moderation/reports/${id}/resolve`)
+        .then(d => {
+            if (d.success) { ['', '-u-', '-c-'].forEach(p => { const el = document.getElementById(`rpt${p}${id}`); if (el) el.remove(); }); }
+            else alert(d.error || 'Failed');
+        })
+        .catch(() => alert('Network error'));
 }
 </script>
 <?= $this->endSection() ?>
