@@ -5,6 +5,7 @@ namespace Config;
 use CodeIgniter\Config\Filters as BaseFilters;
 use App\Filters\AdminAuthFilter;
 use App\Filters\AuthFilter;
+use App\Filters\AuthRateLimitFilter;
 use App\Filters\RateLimitFilter;
 use CodeIgniter\Filters\Cors;
 use CodeIgniter\Filters\CSRF;
@@ -39,6 +40,7 @@ class Filters extends BaseFilters
         'performance'   => PerformanceMetrics::class,
         'auth'          => AuthFilter::class,
         'ratelimit'     => RateLimitFilter::class,
+        'authratelimit' => AuthRateLimitFilter::class,
         'adminauth'     => AdminAuthFilter::class,
     ];
 
@@ -85,8 +87,8 @@ class Filters extends BaseFilters
         ],
         'after' => [
             'cors',
+            'secureheaders', // X-Content-Type-Options, X-Frame-Options, Referrer-Policy
             // 'honeypot',
-            // 'secureheaders',
         ],
     ];
 
@@ -115,7 +117,8 @@ class Filters extends BaseFilters
      * @var array<string, array<string, list<string>>>
      */
     public array $filters = [
-        'ratelimit' => ['before' => ['v1/*']],
-        'adminauth' => ['before' => ['manager/*']],
+        'ratelimit'     => ['before' => ['v1/*']],
+        'authratelimit' => ['before' => ['v1/auth/login', 'v1/auth/register', 'v1/auth/refresh', 'v1/auth/forgot-password']],
+        'adminauth'     => ['before' => ['manager/*']],
     ];
 }

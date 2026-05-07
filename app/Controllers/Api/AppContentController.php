@@ -8,12 +8,11 @@ class AppContentController extends BaseApiController
     // type: 'privacy-policy' | 'terms'
     // No auth required — public endpoint
 
-    public function legal(string $type): void
+    public function legal(string $type): \CodeIgniter\HTTP\ResponseInterface
     {
         $allowed = ['privacy-policy', 'terms'];
         if (! in_array($type, $allowed, true)) {
-            $this->jsonError('Not found.', 404);
-            return;
+            return $this->error('Not found.', 404);
         }
 
         $db  = db_connect();
@@ -22,15 +21,14 @@ class AppContentController extends BaseApiController
             ->get()->getRowArray();
 
         if (! $row) {
-            $this->jsonSuccess([
+            return $this->success([
                 'title'      => $this->defaultTitle($type),
                 'content'    => '',
                 'updated_at' => null,
             ]);
-            return;
         }
 
-        $this->jsonSuccess([
+        return $this->success([
             'title'      => $row['title'] ?? $this->defaultTitle($type),
             'content'    => $row['content'] ?? '',
             'updated_at' => $row['updated_at'],

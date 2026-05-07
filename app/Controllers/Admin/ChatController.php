@@ -79,6 +79,10 @@ class ChatController extends BaseAdminController
 
     public function deleteConversation($id)
     {
+        if (! $this->isSuperAdmin()) {
+            return redirect()->to('/manager/chat')->with('error', 'Access denied. Only super admins can delete conversations.');
+        }
+
         db_connect()->table('conversations')->where('id', (int) $id)->delete();
         $this->audit('conversation_deleted', 'conversation', (int) $id);
 

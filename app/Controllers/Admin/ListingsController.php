@@ -325,6 +325,10 @@ class ListingsController extends BaseAdminController
 
     public function delete($id)
     {
+        if (! $this->isSuperAdmin()) {
+            return redirect()->to('/manager/listings')->with('error', 'Access denied. Only super admins can delete listings.');
+        }
+
         $listing = db_connect()->table('listings')->select('id, title')->where('id', (int) $id)->get()->getRowArray();
 
         if (! $listing) {

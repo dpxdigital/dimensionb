@@ -216,12 +216,52 @@ class OrdersController extends BaseApiController
             'payment_method' => $gateway,
             'updated_at'     => date('Y-m-d H:i:s'),
         ])->update();
-        return redirect()->to(env('APP_FRONTEND_URL', 'https://dimensions.app') . "/marketplace/order/{$orderId}?status=paid");
+        return $this->_brandedPage('success', "Order #{$orderId} paid!", 'Payment received. Return to the app to view your order.', "dimensions://marketplace/orders/{$orderId}?status=paid");
     }
 
     public function paymentCancel(string $orderId): ResponseInterface
     {
-        return redirect()->to(env('APP_FRONTEND_URL', 'https://dimensions.app') . "/marketplace/order/{$orderId}?status=cancelled");
+        return $this->_brandedPage('cancelled', 'Payment Cancelled', 'Your order was not charged. Return to the app to try again.', "dimensions://marketplace/orders/{$orderId}?status=cancelled");
+    }
+
+    private function _brandedPage(string $type, string $title, string $subtitle, string $deepLink): ResponseInterface
+    {
+        $color = $type === 'success' ? '#2A9D5C' : ($type === 'cancelled' ? '#EF9F27' : '#D94032');
+        $icon  = $type === 'success' ? '✓' : ($type === 'cancelled' ? '←' : '✗');
+        $html  = <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#D94032">
+<title>Dimensions</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0A0A0A;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+  .card{background:#161616;border:1px solid #2a2a2a;border-radius:20px;padding:40px 32px;max-width:380px;width:100%;text-align:center}
+  .dot{width:12px;height:12px;background:#D94032;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle}
+  .brand{font-size:18px;font-weight:700;margin-bottom:32px}
+  .icon{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        font-size:32px;margin:0 auto 20px;background:{$color}22;border:2px solid {$color};color:{$color}}
+  h1{font-size:20px;font-weight:700;margin-bottom:10px;color:{$color}}
+  p{font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:28px}
+  .btn{display:block;width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:700;
+       text-decoration:none;background:#D94032;color:#fff;border:none}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand"><span class="dot"></span>Dimensions</div>
+  <div class="icon">{$icon}</div>
+  <h1>{$title}</h1>
+  <p>{$subtitle}</p>
+  <a href="{$deepLink}" class="btn">Return to Dimensions</a>
+</div>
+<script>setTimeout(function(){ window.location.href='{$deepLink}'; }, 800);</script>
+</body></html>
+HTML;
+        return $this->response->setStatusCode(200)->setContentType('text/html')->setBody($html);
     }
 
     private function formatCartItem(array $row): array

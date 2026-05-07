@@ -25,7 +25,7 @@
                         <small style="color:#e05050">Not yet set</small>
                     <?php endif; ?>
                 </div>
-                <a href="/manager/app-content/<?= esc($key) ?>/edit"
+                <a href="<?= site_url() ?>manager/app-content/<?= esc($key) ?>/edit"
                    class="btn btn-sm btn-brand">Edit</a>
             </div>
             <div class="card-body">

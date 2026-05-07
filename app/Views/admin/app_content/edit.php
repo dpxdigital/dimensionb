@@ -3,11 +3,11 @@
 <?= $this->section('content') ?>
 
 <div class="d-flex align-items-center mb-4">
-    <a href="/manager/app-content" class="me-3" style="color:#aaa;text-decoration:none">← App Content</a>
+    <a href="<?= site_url() ?>manager/app-content" class="me-3" style="color:#aaa;text-decoration:none">← App Content</a>
     <h5 class="mb-0" style="color:#fff">Edit: <?= esc($title) ?></h5>
 </div>
 
-<form method="post" action="/manager/app-content/<?= esc($key) ?>/save">
+<form method="post" action="<?= site_url() ?>manager/app-content/<?= esc($key) ?>/save">
     <?= csrf_field() ?>
 
     <div class="mb-3">
@@ -29,7 +29,7 @@
 
     <div class="d-flex gap-2">
         <button type="submit" class="btn btn-brand px-4">Save</button>
-        <a href="/manager/app-content" class="btn btn-outline-secondary">Cancel</a>
+        <a href="<?= site_url() ?>manager/app-content" class="btn btn-outline-secondary">Cancel</a>
     </div>
 </form>
 

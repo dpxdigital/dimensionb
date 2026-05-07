@@ -47,8 +47,8 @@ class ActivationController extends BaseApiController
 
         // Create Stripe Checkout Session via Stripe REST API (no SDK needed)
         $amountCents = (int) ($feeAmount * 100);
-        $successUrl  = base_url("v1/marketplace/activation/paid?session_id={CHECKOUT_SESSION_ID}&vendor_id={$vendor['id']}");
-        $cancelUrl   = base_url("v1/marketplace/activation/cancel?vendor_id={$vendor['id']}");
+        $successUrl = base_url("v1/marketplace/activation/paid?session_id={CHECKOUT_SESSION_ID}&vendor_id={$vendor['id']}");
+        $cancelUrl  = base_url("v1/marketplace/activation/cancel?vendor_id={$vendor['id']}");
 
         $ch = curl_init('https://api.stripe.com/v1/checkout/sessions');
         curl_setopt_array($ch, [
@@ -101,32 +101,102 @@ class ActivationController extends BaseApiController
     {
         $sessionId = $this->request->getGet('session_id');
         $vendorId  = (int) $this->request->getGet('vendor_id');
+        $status    = 'success';
 
         if (! $sessionId || ! $vendorId) {
-            return redirect()->to(env('APP_FRONTEND_URL', 'https://dimensions.app') . '/marketplace/activation?status=error');
+            $status = 'error';
+        } else {
+            $stripeSecret = $this->setting('platform_stripe_secret');
+            $ch = curl_init("https://api.stripe.com/v1/checkout/sessions/{$sessionId}");
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_USERPWD        => "{$stripeSecret}:",
+            ]);
+            $response = curl_exec($ch);
+            curl_close($ch);
+            $session = json_decode($response, true);
+
+            if (($session['payment_status'] ?? '') === 'paid' && (int) ($session['metadata']['vendor_id'] ?? 0) === $vendorId) {
+                db_connect()->table('vendors')->where('id', $vendorId)->set([
+                    'activation_fee_paid'       => 1,
+                    'is_approved'               => 1,
+                    'activation_payment_intent' => $session['payment_intent'] ?? null,
+                    'updated_at'                => date('Y-m-d H:i:s'),
+                ])->update();
+            }
         }
 
-        $stripeSecret = $this->setting('platform_stripe_secret');
-        // Verify session with Stripe
-        $ch = curl_init("https://api.stripe.com/v1/checkout/sessions/{$sessionId}");
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_USERPWD        => "{$stripeSecret}:",
-        ]);
-        $response = curl_exec($ch);
-        curl_close($ch);
-        $session = json_decode($response, true);
+        return $this->_brandedReturnPage($status);
+    }
 
-        if (($session['payment_status'] ?? '') === 'paid' && (int) ($session['metadata']['vendor_id'] ?? 0) === $vendorId) {
-            db_connect()->table('vendors')->where('id', $vendorId)->set([
-                'activation_fee_paid'       => 1,
-                'is_approved'               => 1,
-                'activation_payment_intent' => $session['payment_intent'] ?? null,
-                'updated_at'                => date('Y-m-d H:i:s'),
-            ])->update();
-        }
+    // ── GET /v1/marketplace/activation/cancel ─────────────────────────────────
+    public function cancel(): ResponseInterface
+    {
+        return $this->_brandedReturnPage('cancelled');
+    }
 
-        return redirect()->to(env('APP_FRONTEND_URL', 'https://dimensions.app') . '/marketplace/activation?status=success');
+    private function _brandedReturnPage(string $status): ResponseInterface
+    {
+        $deepLink  = "dimensions://marketplace/activation?status={$status}";
+        $isSuccess   = $status === 'success';
+        $isCancelled = $status === 'cancelled';
+        $icon    = $isSuccess ? '✓' : ($isCancelled ? '←' : '✗');
+        $title   = $isSuccess ? 'Payment Successful!' : ($isCancelled ? 'Payment Cancelled' : 'Payment Error');
+        $subtitle = $isSuccess
+            ? 'Your activation fee has been received. Return to the app to check your store status.'
+            : ($isCancelled
+                ? 'You cancelled the payment. Return to the app to try again whenever you\'re ready.'
+                : 'Something went wrong. Return to the app and try again.');
+        $color = $isSuccess ? '#2A9D5C' : ($isCancelled ? '#EF9F27' : '#D94032');
+
+        $html = <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#D94032">
+<title>Dimensions</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0A0A0A;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+  .card{background:#161616;border:1px solid #2a2a2a;border-radius:20px;padding:40px 32px;
+        max-width:380px;width:100%;text-align:center}
+  .dot{width:12px;height:12px;background:#D94032;border-radius:50%;display:inline-block;margin-right:8px;vertical-align:middle}
+  .brand{font-size:18px;font-weight:700;color:#fff;margin-bottom:32px}
+  .icon{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+        font-size:32px;margin:0 auto 20px;background:{$color}22;border:2px solid {$color}}
+  h1{font-size:20px;font-weight:700;margin-bottom:10px;color:{$color}}
+  p{font-size:14px;color:rgba(255,255,255,.6);line-height:1.6;margin-bottom:28px}
+  .btn{display:block;width:100%;padding:14px;border-radius:12px;font-size:15px;font-weight:700;
+       text-decoration:none;background:#D94032;color:#fff;margin-bottom:12px;cursor:pointer;
+       border:none}
+  .btn-outline{background:transparent;border:1px solid #333;color:rgba(255,255,255,.5);font-size:13px;padding:10px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand"><span class="dot"></span>Dimensions</div>
+  <div class="icon" style="color:{$color}">{$icon}</div>
+  <h1>{$title}</h1>
+  <p>{$subtitle}</p>
+  <a href="{$deepLink}" class="btn" id="openApp">Return to Dimensions</a>
+  <p style="font-size:12px;color:rgba(255,255,255,.3);margin-top:8px">
+    If the app doesn't open, close this browser and return to Dimensions manually.
+  </p>
+</div>
+<script>
+  // Auto-attempt deep link after 800ms
+  setTimeout(function(){ window.location.href = '{$deepLink}'; }, 800);
+</script>
+</body>
+</html>
+HTML;
+
+        return $this->response->setStatusCode(200)
+            ->setContentType('text/html')
+            ->setBody($html);
     }
 
     // ── POST /v1/marketplace/activation/webhook ───────────────────────────────

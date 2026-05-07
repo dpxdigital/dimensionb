@@ -114,6 +114,8 @@ function toggleTargetValue() {
         label.textContent = 'Category';
     }
 }
+const BASE = '<?= rtrim(site_url(), '/') ?>';
+
 function sendNotification() {
     const type = document.getElementById('targetType').value;
     const title = document.getElementById('notifTitle').value.trim();
@@ -135,7 +137,7 @@ function sendNotification() {
     fd.append('body', body);
     fd.append('deep_link', deepLink);
 
-    fetch('/manager/notifications/send', {
+    fetch(BASE + '/manager/notifications/send', {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         body: fd

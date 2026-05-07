@@ -227,7 +227,7 @@ $routes->group('v1', static function (RouteCollection $routes): void {
     // ── No-auth: payment gateway redirects & webhooks (no Bearer token) ─────────
     $routes->get('marketplace/flutterwave-checkout',        'Marketplace\PaymentController::flutterwaveCheckout');
     $routes->get( 'marketplace/activation/paid',            'Marketplace\ActivationController::paid');
-    $routes->get( 'marketplace/activation/cancel',          'Marketplace\ActivationController::paid');
+    $routes->get( 'marketplace/activation/cancel',          'Marketplace\ActivationController::cancel');
     $routes->post('marketplace/activation/webhook',         'Marketplace\ActivationController::webhook');
     $routes->post('marketplace/webhooks/stripe',            'Marketplace\PaymentController::stripeWebhook');
     $routes->post('marketplace/webhooks/paypal',            'Marketplace\PaymentController::paypalWebhook');

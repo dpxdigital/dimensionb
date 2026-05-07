@@ -55,6 +55,10 @@ class LiveController extends BaseAdminController
 
     public function delete($id)
     {
+        if (! $this->isSuperAdmin()) {
+            return redirect()->to('/manager/live')->with('error', 'Access denied. Only super admins can delete sessions.');
+        }
+
         $session = db_connect()->table('live_sessions')->where('id', (int) $id)->get()->getRowArray();
 
         if (! $session) {
