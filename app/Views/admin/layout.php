@@ -141,6 +141,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="<?= site_url() ?>manager/app-content" class="nav-link <?= str_contains(current_url(), '/manager/app-content') ? 'active' : '' ?>">
+                        <i class="nav-icon fas fa-file-alt"></i><p>App Content</p>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="<?= site_url() ?>manager/settings" class="nav-link <?= str_contains(current_url(), '/manager/settings') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-cog"></i><p>Settings</p>
                     </a>

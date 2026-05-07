@@ -20,6 +20,9 @@ $routes->group('v1', static function (RouteCollection $routes): void {
     // ── Media proxy (public — no auth, serves S3 objects via presigned redirect) ─
     $routes->get('media', 'MediaController::serve');
 
+    // ── App content / legal (public) ─────────────────────────────────────────
+    $routes->get('app/legal/(:segment)', 'AppContentController::legal/$1');
+
     // ── Auth (public) ─────────────────────────────────────────────────────────
     $routes->group('auth', static function (RouteCollection $routes): void {
         $routes->post('login',    'Auth\AuthController::login');
@@ -311,6 +314,11 @@ $routes->group('manager', ['filter' => 'adminauth'], static function (RouteColle
     // Black Census submissions
     $routes->get( 'census',                                   'CensusController::index');
     $routes->get( 'census/export',                            'CensusController::export');
+
+    // App Content / Legal pages (admin editable)
+    $routes->get( 'app-content',                              'AppContentController::index');
+    $routes->get( 'app-content/(:segment)/edit',              'AppContentController::edit/$1');
+    $routes->post('app-content/(:segment)/save',              'AppContentController::save/$1');
 
     // Admin user management (super_admin only)
     $routes->get( 'admin-users',                              'AdminUsersController::index');
