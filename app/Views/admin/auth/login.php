@@ -34,7 +34,7 @@
             <div class="alert alert-danger py-2 mb-3"><?= esc($error) ?></div>
             <?php endif; ?>
 
-            <form action="/manager/login" method="post">
+            <form action="<?= site_url('manager/login') ?>" method="post">
                 <?= csrf_field() ?>
                 <div class="form-group mb-3">
                     <label>Email address</label>

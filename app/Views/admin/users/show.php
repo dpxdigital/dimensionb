@@ -63,7 +63,7 @@
                                 <?php foreach ($items as $item): ?>
                                 <tr>
                                     <td style="font-size:.82rem">
-                                        <a href="/manager/listings/<?= $item['id'] ?>" style="color:#7F77DD">
+                                        <a href="<?= site_url() ?>manager/listings/<?= $item['id'] ?>" style="color:#7F77DD">
                                             <?= esc($item['title']) ?>
                                         </a>
                                     </td>

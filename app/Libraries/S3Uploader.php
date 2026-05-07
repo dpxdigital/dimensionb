@@ -126,25 +126,78 @@ class S3Uploader
 
     /**
      * Upload a file, falling back to local FCPATH storage if S3 is not configured.
+     * When S3 is configured, returns a proxy URL (v1/media?key=…) so the object
+     * is served via presigned redirect rather than a direct (blocked) S3 URL.
      *
      * @return string  Public URL of the stored file
      */
     public function uploadOrLocal(string $localPath, string $s3Key, string $mimeType, string $subfolder): string
     {
         if ($this->isConfigured()) {
-            return $this->upload($localPath, $s3Key, $mimeType);
+            try {
+                $this->upload($localPath, $s3Key, $mimeType);
+                // Return a proxy URL; the MediaController generates a fresh presigned URL on each request.
+                return rtrim(base_url(), '/') . '/v1/media?key=' . urlencode($s3Key);
+            } catch (\Throwable $e) {
+                log_message('error', 'S3 upload failed, using local fallback: ' . $e->getMessage());
+            }
         }
 
         // Local fallback
         $dest = FCPATH . 'uploads/' . $subfolder . '/';
         if (! is_dir($dest)) {
-            mkdir($dest, 0755, true);
+            @mkdir($dest, 0755, true);
         }
         $filename = basename($localPath);
         $target   = $dest . $filename;
         if ($localPath !== $target) {
-            copy($localPath, $target);
+            @copy($localPath, $target);
         }
         return base_url('uploads/' . $subfolder . '/' . $filename);
+    }
+
+    /**
+     * Generate a presigned GET URL for an S3 object.
+     *
+     * @param string $s3Key      e.g. 'uploads/listings/foo.jpg'
+     * @param int    $expiresIn  Seconds until expiry (default 1 hour)
+     */
+    public function generatePresignedGetUrl(string $s3Key, int $expiresIn = 3600): string
+    {
+        $date      = gmdate('Ymd');
+        $datetime  = gmdate('Ymd\THis\Z');
+        $host      = "{$this->bucket}.s3.{$this->region}.amazonaws.com";
+        $credScope = "{$date}/{$this->region}/s3/aws4_request";
+
+        $queryParams = [
+            'X-Amz-Algorithm'     => 'AWS4-HMAC-SHA256',
+            'X-Amz-Credential'    => "{$this->key}/{$credScope}",
+            'X-Amz-Date'          => $datetime,
+            'X-Amz-Expires'       => (string) $expiresIn,
+            'X-Amz-SignedHeaders' => 'host',
+        ];
+        ksort($queryParams);
+        $qs = http_build_query($queryParams);
+
+        $canonicalRequest = implode("\n", [
+            'GET',
+            '/' . $s3Key,
+            $qs,
+            "host:{$host}\n",
+            'host',
+            'UNSIGNED-PAYLOAD',
+        ]);
+
+        $stringToSign = implode("\n", [
+            'AWS4-HMAC-SHA256',
+            $datetime,
+            $credScope,
+            hash('sha256', $canonicalRequest),
+        ]);
+
+        $signingKey = $this->getSigningKey($date);
+        $signature  = hash_hmac('sha256', $stringToSign, $signingKey);
+
+        return "https://{$host}/{$s3Key}?{$qs}&X-Amz-Signature={$signature}";
     }
 }

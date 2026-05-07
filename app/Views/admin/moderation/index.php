@@ -111,7 +111,7 @@
                             <td style="font-size:.8rem;color:#888"><?= esc($r['reporter_name'] ?? '—') ?></td>
                             <td style="font-size:.8rem;color:#888"><?= date('M j', strtotime($r['created_at'])) ?></td>
                             <td>
-                                <a href="/manager/chat/<?= $r['reference_id'] ?>" class="btn btn-xs btn-outline-secondary mr-1">View</a>
+                                <a href="<?= site_url() ?>manager/chat/<?= $r['reference_id'] ?>" class="btn btn-xs btn-outline-secondary mr-1">View</a>
                                 <button class="btn btn-xs btn-outline-secondary" onclick="resolveReport(<?= $r['id'] ?>)">Resolve</button>
                             </td>
                         </tr>

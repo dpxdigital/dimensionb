@@ -53,9 +53,9 @@ class UserModel extends Model
         $db  = db_connect();
         $uid = $user['id'];
 
-        $user['followers_count'] = 0;
-        $user['following_count'] = 0;
-        $user['listings_count']  = (int) $db->table('listings')->where('submitted_by', $uid)->countAllResults();
+        $user['followers_count'] = (int) $db->table('user_follows')->where('following_id', $uid)->countAllResults();
+        $user['following_count'] = (int) $db->table('user_follows')->where('follower_id', $uid)->countAllResults();
+        $user['listings_count']  = (int) $db->table('posts')->where('user_id', $uid)->countAllResults();
         $user['is_vendor']       = (bool) ($user['is_vendor'] ?? false);
         $user['city']            = $user['city'] ?? null;
 

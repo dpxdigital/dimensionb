@@ -94,7 +94,10 @@ class PostsController extends BaseApiController
         $db     = db_connect();
 
         $query = $db->table('posts p')
-            ->select('p.*, u.name AS user_name, u.avatar_url')
+            ->select('p.*, u.name AS user_name, u.avatar_url,
+                (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
+                (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
+                (SELECT COUNT(*) FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = ' . $userId . ') AS is_liked', false)
             ->join('users u', 'u.id = p.user_id')
             ->orderBy('p.id', 'DESC')
             ->limit($limit + 1);
@@ -110,7 +113,7 @@ class PostsController extends BaseApiController
         // Get followed user IDs for is_following flag
         $followedIds = [];
         try {
-            $follows = $db->table('follows')
+            $follows = $db->table('user_follows')
                 ->select('following_id')
                 ->where('follower_id', $userId)
                 ->get()->getResultArray();
@@ -124,6 +127,28 @@ class PostsController extends BaseApiController
         }, $rows);
 
         return $this->success($formatted, 'OK', 200, ['next_cursor' => $nextCursor]);
+    }
+
+    // ── GET /v1/users/:id/posts ───────────────────────────────────────────────
+
+    public function byUser($userId = null): ResponseInterface
+    {
+        $authId = $this->authUserId();
+        $db     = db_connect();
+        $limit  = 30;
+
+        $rows = $db->table('posts p')
+            ->select('p.*, u.name AS user_name, u.avatar_url,
+                (SELECT COUNT(*) FROM post_likes pl WHERE pl.post_id = p.id) AS like_count,
+                (SELECT COUNT(*) FROM post_comments pc WHERE pc.post_id = p.id) AS comment_count,
+                (SELECT COUNT(*) FROM post_likes pl2 WHERE pl2.post_id = p.id AND pl2.user_id = ' . $authId . ') AS is_liked', false)
+            ->join('users u', 'u.id = p.user_id')
+            ->where('p.user_id', (int) $userId)
+            ->orderBy('p.id', 'DESC')
+            ->limit($limit)
+            ->get()->getResultArray();
+
+        return $this->success(array_map([$this, 'formatPost'], $rows));
     }
 
     // ── GET /v1/posts/:id/comments ────────────────────────────────────────────
@@ -184,16 +209,85 @@ class PostsController extends BaseApiController
         ], 'Comment added', 201);
     }
 
+    // ── POST /v1/posts/:id/like ───────────────────────────────────────────────
+
+    public function like($id = null): ResponseInterface
+    {
+        $userId = $this->authUserId();
+        $db     = db_connect();
+
+        // Create table if it doesn't exist yet
+        $db->query('CREATE TABLE IF NOT EXISTS `post_likes` (
+            `id` int(11) NOT NULL AUTO_INCREMENT,
+            `post_id` int(11) NOT NULL,
+            `user_id` int(11) NOT NULL,
+            `created_at` datetime NOT NULL,
+            PRIMARY KEY (`id`),
+            UNIQUE KEY `unique_like` (`post_id`,`user_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4');
+
+        $exists = $db->table('post_likes')
+            ->where('post_id', (int) $id)
+            ->where('user_id', $userId)
+            ->countAllResults();
+
+        if ($exists) {
+            $db->table('post_likes')->where('post_id', (int) $id)->where('user_id', $userId)->delete();
+            $liked = false;
+        } else {
+            $db->table('post_likes')->insert([
+                'post_id'    => (int) $id,
+                'user_id'    => $userId,
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+            $liked = true;
+        }
+
+        $likeCount = $db->table('post_likes')->where('post_id', (int) $id)->countAllResults();
+        return $this->success(['liked' => $liked, 'like_count' => $likeCount]);
+    }
+
     private function formatPost(array $row): array
     {
+        $rawMedia = isset($row['media']) ? (json_decode($row['media'], true) ?? []) : [];
+        $media = array_map(function ($m) {
+            return array_merge($m, ['url' => $this->proxyS3Url($m['url'] ?? null)]);
+        }, $rawMedia);
+
         return [
-            'id'         => (string) $row['id'],
-            'user_id'    => (string) $row['user_id'],
-            'user_name'  => $row['user_name'] ?? '',
-            'avatar_url' => $row['avatar_url'] ?? null,
-            'body'       => $row['body'] ?? null,
-            'media'      => isset($row['media']) ? json_decode($row['media'], true) : [],
-            'created_at' => $row['created_at'],
+            'id'            => (string) $row['id'],
+            'user_id'       => (string) $row['user_id'],
+            'user_name'     => $row['user_name'] ?? '',
+            'avatar_url'    => $this->proxyS3Url($row['avatar_url'] ?? null),
+            'body'          => $row['body'] ?? null,
+            'media'         => $media,
+            'like_count'    => (int) ($row['like_count']    ?? 0),
+            'comment_count' => (int) ($row['comment_count'] ?? 0),
+            'share_count'   => (int) ($row['share_count']   ?? 0),
+            'is_liked'      => (bool) ($row['is_liked']     ?? false),
+            'created_at'    => $row['created_at'],
         ];
+    }
+
+    private function proxyS3Url(?string $url): ?string
+    {
+        if ($url === null || $url === '') return null;
+        $base = rtrim(base_url(), '/');
+
+        if (str_contains($url, 'amazonaws.com')) {
+            $key = ltrim(parse_url($url, PHP_URL_PATH) ?? '', '/');
+            if ($key === '') return $url;
+            return $base . '/v1/media?key=' . urlencode($key);
+        }
+
+        if (str_contains($url, 'api.dimensions.global')) {
+            $parsed = parse_url($url);
+            parse_str($parsed['query'] ?? '', $qs);
+            if (!empty($qs['key'])) {
+                return $base . '/v1/media?key=' . urlencode($qs['key']);
+            }
+        }
+
+        return $url;
     }
 }

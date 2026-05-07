@@ -206,6 +206,24 @@ class OrdersController extends BaseApiController
         return $this->success(['status' => $status], 'Order status updated');
     }
 
+    // ── Payment redirect handlers ─────────────────────────────────────────────
+
+    public function paymentSuccess(string $orderId): ResponseInterface
+    {
+        $gateway = $this->request->getGet('gateway') ?? 'unknown';
+        db_connect()->table('orders')->where('id', (int) $orderId)->set([
+            'status'         => 'paid',
+            'payment_method' => $gateway,
+            'updated_at'     => date('Y-m-d H:i:s'),
+        ])->update();
+        return redirect()->to(env('APP_FRONTEND_URL', 'https://dimensions.app') . "/marketplace/order/{$orderId}?status=paid");
+    }
+
+    public function paymentCancel(string $orderId): ResponseInterface
+    {
+        return redirect()->to(env('APP_FRONTEND_URL', 'https://dimensions.app') . "/marketplace/order/{$orderId}?status=cancelled");
+    }
+
     private function formatCartItem(array $row): array
     {
         $images = isset($row['images']) ? json_decode($row['images'], true) : [];

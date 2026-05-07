@@ -9,7 +9,7 @@ class AdminAuthController extends BaseAdminController
     public function loginForm()
     {
         if (session('admin_logged_in')) {
-            return redirect()->to('/manager');
+            return redirect()->to(site_url('manager'));
         }
         return view('admin/auth/login', ['error' => session()->getFlashdata('error')]);
     }
@@ -20,7 +20,7 @@ class AdminAuthController extends BaseAdminController
         $password = $this->request->getPost('password') ?? '';
 
         if (empty($email) || empty($password)) {
-            return redirect()->back()->with('error', 'Email and password are required.');
+            return redirect()->to(site_url('manager/login'))->with('error', 'Email and password are required.');
         }
 
         $admin = db_connect()->table('admin_users')
@@ -29,14 +29,15 @@ class AdminAuthController extends BaseAdminController
             ->get()->getRowArray();
 
         if ($admin === null || ! password_verify($password, $admin['password'])) {
-            // Audit failed attempt
-            db_connect()->table('admin_audit_log')->insert([
-                'admin_id'   => 0,
-                'action'     => 'login_failed',
-                'detail'     => "Failed login attempt for: {$email}",
-                'created_at' => date('Y-m-d H:i:s'),
-            ]);
-            return redirect()->back()->with('error', 'Invalid credentials.');
+            try {
+                db_connect()->table('admin_audit_log')->insert([
+                    'admin_id'   => null,
+                    'action'     => 'login_failed',
+                    'detail'     => "Failed login attempt for: {$email}",
+                    'created_at' => date('Y-m-d H:i:s'),
+                ]);
+            } catch (\Throwable $_) {}
+            return redirect()->to(site_url('manager/login'))->with('error', 'Invalid credentials.');
         }
 
         session()->set([
@@ -53,13 +54,13 @@ class AdminAuthController extends BaseAdminController
 
         $this->audit('login');
 
-        return redirect()->to('/manager');
+        return redirect()->to(site_url('manager'));
     }
 
     public function logout()
     {
         $this->audit('logout');
         session()->destroy();
-        return redirect()->to('/manager/login');
+        return redirect()->to(site_url('manager/login'));
     }
 }

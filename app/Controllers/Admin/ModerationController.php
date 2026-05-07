@@ -62,18 +62,21 @@ class ModerationController extends BaseAdminController
 
         // Move to listings
         $db->table('listings')->insert([
-            'title'       => $submission['title'],
-            'description' => $submission['description'],
-            'org_id'      => null,
-            'trust_level' => $trustLevel,
-            'trust_label' => $trustLabel,
-            'date'        => $submission['date'],
-            'location'    => $submission['location'],
-            'source_url'  => $submission['source_url'],
-            'status'      => 'approved',
-            'created_by'  => $submission['user_id'],
-            'created_at'  => date('Y-m-d H:i:s'),
-            'updated_at'  => date('Y-m-d H:i:s'),
+            'title'        => $submission['title'],
+            'description'  => $submission['description'],
+            'org_name'     => $submission['org_name'] ?? '',
+            'org_id'       => null,
+            'trust_level'  => $trustLevel,
+            'trust_label'  => $trustLabel,
+            'date'         => $submission['date'],
+            'location'     => $submission['location'],
+            'external_url' => $submission['source_url'] ?? null,
+            'cover_url'    => $submission['cover_url'] ?? null,
+            'is_active'    => 1,
+            'status'       => 'approved',
+            'submitted_by' => $submission['user_id'],
+            'created_at'   => date('Y-m-d H:i:s'),
+            'updated_at'   => date('Y-m-d H:i:s'),
         ]);
 
         $db->table('submissions')->where('id', (int) $id)->update([

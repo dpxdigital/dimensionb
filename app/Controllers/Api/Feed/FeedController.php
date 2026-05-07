@@ -14,10 +14,13 @@ class FeedController extends BaseApiController
     public function index(): ResponseInterface
     {
         $userId  = $this->authUserId();
-        $tab     = $this->request->getGet('tab') ?? 'default';
-        $lastId  = (int) ($this->request->getGet('last_id') ?? 0) ?: null;
-        $lat     = $this->request->getGet('lat');
-        $lng     = $this->request->getGet('lng');
+        $tab    = $this->request->getGet('tab') ?? 'default';
+        $lastId = (int) ($this->request->getGet('last_id') ?? 0) ?: null;
+        $lat    = $this->request->getGet('lat');
+        $lng    = $this->request->getGet('lng');
+
+        // Accept 'near_me' as an alias for 'nearby'
+        if ($tab === 'near_me') $tab = 'nearby';
 
         $model = new ListingModel();
 
@@ -27,10 +30,13 @@ class FeedController extends BaseApiController
                 break;
 
             case 'nearby':
-                if ($lat === null || $lng === null) {
-                    return $this->error('lat and lng are required for the nearby tab.', 422);
+                if ($lat !== null && $lng !== null) {
+                    // Sort by proximity when location is available
+                    $model->withMeta($userId)->active()->nearby((float) $lat, (float) $lng);
+                } else {
+                    // No location provided — show all active listings (newest first)
+                    $model->withMeta($userId)->active();
                 }
-                $model->withMeta($userId)->active()->nearby((float) $lat, (float) $lng);
                 break;
 
             default: // personalised

@@ -44,8 +44,16 @@ class GroupController extends BaseApiController
             return $this->error('Maximum 49 other members (50 total including you).', 422);
         }
 
-        // Verify all member IDs are valid users (connection not required for groups)
+        // Ensure description and is_private columns exist (idempotent migration)
         $db = db_connect();
+        try {
+            $db->query('ALTER TABLE conversations ADD COLUMN description TEXT NULL');
+        } catch (\Throwable $e) { /* already exists */ }
+        try {
+            $db->query('ALTER TABLE conversations ADD COLUMN is_private TINYINT(1) NOT NULL DEFAULT 0');
+        } catch (\Throwable $e) { /* already exists */ }
+
+        // Verify all member IDs are valid users (connection not required for circles)
         foreach ($memberIds as $memberId) {
             $exists = $db->table('users')->where('id', $memberId)->where('is_active', 1)->countAllResults();
             if (! $exists) {
@@ -53,15 +61,18 @@ class GroupController extends BaseApiController
             }
         }
 
-        $db     = db_connect();
-        $now    = date('Y-m-d H:i:s');
-        $avatar = $input['avatar_url'] ?? null;
+        $now         = date('Y-m-d H:i:s');
+        $avatar      = $input['avatar_url'] ?? null;
+        $description = isset($input['description']) ? trim($input['description']) : null;
+        $isPrivate   = ! empty($input['is_private']) ? 1 : 0;
 
         $db->table('conversations')->insert([
             'type'            => 'group',
             'created_by'      => $userId,
             'name'            => trim($input['name']),
             'avatar_url'      => $avatar,
+            'description'     => $description,
+            'is_private'      => $isPrivate,
             'last_message_at' => $now,
             'created_at'      => $now,
             'updated_at'      => $now,
@@ -84,7 +95,7 @@ class GroupController extends BaseApiController
             'conversation_id' => $convId,
             'sender_id'       => $userId,
             'type'            => 'system',
-            'body'            => "{$creatorName} created the group",
+            'body'            => "{$creatorName} created the circle",
             'created_at'      => $now,
             'updated_at'      => $now,
         ]);
@@ -100,7 +111,7 @@ class GroupController extends BaseApiController
 
         return $this->success(
             $this->formatGroupWithMembers($conv, $members),
-            'Group created',
+            'Circle created',
             201
         );
     }
@@ -293,13 +304,13 @@ class GroupController extends BaseApiController
                 'conversation_id' => $convId,
                 'sender_id'       => $userId,
                 'type'            => 'system',
-                'body'            => "{$userName} left the group",
+                'body'            => "{$userName} left the circle",
                 'created_at'      => $now,
                 'updated_at'      => $now,
             ]);
         }
 
-        return $this->success(null, 'You have left the group');
+        return $this->success(null, 'You have left the circle');
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────

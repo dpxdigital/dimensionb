@@ -51,7 +51,7 @@
                 </span>
             </a>
             <div class="dropdown-menu dropdown-menu-right">
-                <a class="dropdown-item text-danger" href="/manager/logout"><i class="fas fa-sign-out-alt mr-1"></i> Logout</a>
+                <a class="dropdown-item text-danger" href="<?= site_url() ?>manager/logout"><i class="fas fa-sign-out-alt mr-1"></i> Logout</a>
             </div>
         </li>
     </ul>
@@ -59,7 +59,7 @@
 
 <!-- Sidebar -->
 <aside class="main-sidebar sidebar-dark-danger elevation-4" style="background:#1a1a1a">
-    <a href="/manager" class="brand-link" style="background:#1a1a1a;border-bottom:1px solid #333">
+    <a href="<?= site_url() ?>manager" class="brand-link" style="background:#1a1a1a;border-bottom:1px solid #333">
         <span class="brand-text font-weight-bold ml-3" style="color:#D94032;font-size:1.1rem">● Dimensions</span>
         <small class="ml-1" style="color:#888;font-size:.7rem">Manager</small>
     </a>
@@ -67,24 +67,24 @@
         <nav class="mt-2">
             <ul class="nav nav-pills nav-sidebar flex-column nav-child-indent" data-widget="treeview" role="menu">
                 <li class="nav-item">
-                    <a href="/manager" class="nav-link <?= (current_url(true)->getPath() === '/manager') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager" class="nav-link <?= str_ends_with(rtrim(current_url(true)->getPath(), '/'), 'manager') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-tachometer-alt"></i><p>Dashboard</p>
                     </a>
                 </li>
                 <?php if (($adminUser['role'] ?? '') === 'super_admin'): ?>
                 <li class="nav-item">
-                    <a href="/manager/users" class="nav-link <?= str_contains(current_url(), '/manager/users') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/users" class="nav-link <?= str_contains(current_url(), '/manager/users') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-users"></i><p>Users</p>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/manager/listings" class="nav-link <?= str_contains(current_url(), '/manager/listings') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/listings" class="nav-link <?= str_contains(current_url(), '/manager/listings') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-list-alt"></i><p>Listings</p>
                     </a>
                 </li>
                 <?php endif; ?>
                 <li class="nav-item">
-                    <a href="/manager/moderation" class="nav-link <?= str_contains(current_url(), '/manager/moderation') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/moderation" class="nav-link <?= str_contains(current_url(), '/manager/moderation') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-shield-alt"></i>
                         <p>Moderation
                             <?php
@@ -101,38 +101,52 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/manager/chat" class="nav-link <?= str_contains(current_url(), '/manager/chat') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/chat" class="nav-link <?= str_contains(current_url(), '/manager/chat') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-comments"></i><p>Chat Moderation</p>
                     </a>
                 </li>
                 <?php if (($adminUser['role'] ?? '') === 'super_admin'): ?>
                 <li class="nav-item">
-                    <a href="/manager/live" class="nav-link <?= str_contains(current_url(), '/manager/live') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/live" class="nav-link <?= str_contains(current_url(), '/manager/live') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-broadcast-tower"></i><p>Live Sessions</p>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/manager/marketplace" class="nav-link <?= str_contains(current_url(), '/manager/marketplace') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/marketplace" class="nav-link <?= str_contains(current_url(), '/manager/marketplace') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-store"></i><p>Marketplace</p>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/manager/notifications" class="nav-link <?= str_contains(current_url(), '/manager/notifications') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/census" class="nav-link <?= str_contains(current_url(), '/manager/census') ? 'active' : '' ?>">
+                        <i class="nav-icon fas fa-clipboard-list"></i><p>Black Census</p>
+                        <?php
+                        try {
+                            $censusCount = db_connect()->table('census_records')->countAllResults();
+                        } catch (\Throwable $e) {
+                            $censusCount = 0;
+                        }
+                        if ($censusCount > 0): ?>
+                        <span class="badge badge-secondary right"><?= number_format($censusCount) ?></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="<?= site_url() ?>manager/notifications" class="nav-link <?= str_contains(current_url(), '/manager/notifications') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-bell"></i><p>Notifications</p>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/manager/analytics" class="nav-link <?= str_contains(current_url(), '/manager/analytics') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/analytics" class="nav-link <?= str_contains(current_url(), '/manager/analytics') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-chart-line"></i><p>Analytics</p>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/manager/settings" class="nav-link <?= str_contains(current_url(), '/manager/settings') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/settings" class="nav-link <?= str_contains(current_url(), '/manager/settings') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-cog"></i><p>Settings</p>
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a href="/manager/admin-users" class="nav-link <?= str_contains(current_url(), '/manager/admin-users') ? 'active' : '' ?>">
+                    <a href="<?= site_url() ?>manager/admin-users" class="nav-link <?= str_contains(current_url(), '/manager/admin-users') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-user-shield"></i><p>Admin Users</p>
                     </a>
                 </li>

@@ -9,7 +9,7 @@
     foreach ($tabs as $val => $label): ?>
     <li class="nav-item">
         <a class="nav-link <?= ($status ?? '') === $val ? 'active' : '' ?>"
-           href="/manager/marketplace/orders<?= $val ? '?status='.$val : '' ?>"
+           href="<?= site_url() ?>manager/marketplace/orders<?= $val ? '?status='.$val : '' ?>"
            style="<?= ($status ?? '') === $val ? 'background:#D94032;border-color:#D94032;color:#fff' : 'color:#888;border-color:transparent' ?>">
             <?= $label ?>
         </a>

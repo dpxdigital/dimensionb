@@ -81,7 +81,7 @@
             <button class="btn btn-sm btn-outline-danger" onclick="deleteConv(<?= $conv['id'] ?>)">
                 <i class="fas fa-trash mr-1"></i> Delete Conversation
             </button>
-            <a href="/manager/chat" class="btn btn-sm btn-outline-secondary">← Back to Chat</a>
+            <a href="<?= site_url() ?>manager/chat" class="btn btn-sm btn-outline-secondary">← Back to Chat</a>
         </div>
     </div>
 </div>

@@ -22,7 +22,7 @@
                             <td style="font-size:.8rem;color:#888"><?= esc($r['reporter_name'] ?? '—') ?></td>
                             <td style="font-size:.8rem;color:#888"><?= date('M j H:i', strtotime($r['created_at'])) ?></td>
                             <td class="text-right">
-                                <a href="/manager/chat/<?= $r['reference_id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
+                                <a href="<?= site_url() ?>manager/chat/<?= $r['reference_id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
                                 <button class="btn btn-xs btn-outline-danger ml-1" onclick="deleteConv(<?= $r['reference_id'] ?>)">Delete</button>
                             </td>
                         </tr>
@@ -55,7 +55,7 @@
                             <td style="font-size:.8rem;color:#888"><?= esc($g['created_by_name'] ?? '—') ?></td>
                             <td style="font-size:.8rem;color:#888"><?= $g['last_message_at'] ? date('M j H:i', strtotime($g['last_message_at'])) : '—' ?></td>
                             <td class="text-right">
-                                <a href="/manager/chat/<?= $g['id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
+                                <a href="<?= site_url() ?>manager/chat/<?= $g['id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
                                 <button class="btn btn-xs btn-outline-danger ml-1" onclick="deleteConv(<?= $g['id'] ?>)">Delete</button>
                             </td>
                         </tr>

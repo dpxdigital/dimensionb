@@ -47,7 +47,7 @@ class SubmissionsController extends BaseApiController
                 if (! is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
                 $filename = 'sub_' . $userId . '_' . time() . '.' . $ext;
                 if ($imageFile->move($uploadDir, $filename)) {
-                    $coverUrl = base_url('uploads/submissions/' . $filename);
+                    $coverUrl = 'http://dimensions.global/api/uploads/submissions/' . $filename;
                 }
             }
         }

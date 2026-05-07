@@ -66,6 +66,32 @@ class ProfileTabsController extends BaseApiController
         return $this->success($data);
     }
 
+    // GET /v1/users/:id/chapters
+    public function userChapters($targetUserId = null): ResponseInterface
+    {
+        $db = db_connect();
+
+        $rows = $db->table('chapter_members cm')
+            ->select('c.id, c.name, c.city, c.state, c.image_url, c.member_count')
+            ->join('chapters c', 'c.id = cm.chapter_id')
+            ->where('cm.user_id', (int) $targetUserId)
+            ->orderBy('cm.joined_at', 'DESC')
+            ->get()->getResultArray();
+
+        $data = array_map(function ($row) {
+            return [
+                'id'           => (string) $row['id'],
+                'name'         => $row['name'],
+                'city'         => $row['city'] ?? null,
+                'state'        => $row['state'] ?? null,
+                'image_url'    => $row['image_url'] ?? null,
+                'member_count' => (int) ($row['member_count'] ?? 0),
+            ];
+        }, $rows);
+
+        return $this->success($data);
+    }
+
     // GET /v1/profile/chapters
     public function chapters(): ResponseInterface
     {

@@ -7,11 +7,11 @@
         <form method="get" class="d-flex gap-2 flex-wrap align-items-center">
             <input type="text" name="q" class="form-control form-control-sm"
                    style="background:#1E1E1E;border-color:#333;color:#fff;max-width:220px"
-                   placeholder="Search listings…" value="<?= esc($q ?? '') ?>">
+                   placeholder="Search listings…" value="<?= esc($search ?? '') ?>">
             <select name="category" class="form-control form-control-sm" style="background:#1E1E1E;border-color:#333;color:#fff;max-width:150px">
                 <option value="">All categories</option>
                 <?php foreach ($categories as $cat): ?>
-                <option value="<?= esc($cat['slug']) ?>" <?= ($filters['category'] ?? '') === $cat['slug'] ? 'selected' : '' ?>>
+                <option value="<?= esc($cat['slug']) ?>" <?= ($category ?? '') === $cat['slug'] ? 'selected' : '' ?>>
                     <?= esc($cat['name']) ?>
                 </option>
                 <?php endforeach; ?>
@@ -19,17 +19,21 @@
             <select name="trust" class="form-control form-control-sm" style="background:#1E1E1E;border-color:#333;color:#fff;max-width:170px">
                 <option value="">All trust levels</option>
                 <?php foreach (['institution_verified','curator_reviewed','community_submitted','approved_live_host','needs_reconfirmation'] as $tl): ?>
-                <option value="<?= $tl ?>" <?= ($filters['trust'] ?? '') === $tl ? 'selected' : '' ?>><?= esc(str_replace('_',' ', $tl)) ?></option>
+                <option value="<?= $tl ?>" <?= ($trustLevel ?? '') === $tl ? 'selected' : '' ?>><?= esc(str_replace('_',' ', $tl)) ?></option>
                 <?php endforeach; ?>
             </select>
             <select name="status" class="form-control form-control-sm" style="background:#1E1E1E;border-color:#333;color:#fff;max-width:120px">
                 <option value="">All status</option>
-                <option value="1" <?= isset($filters['status']) && $filters['status'] === '1' ? 'selected' : '' ?>>Active</option>
-                <option value="0" <?= isset($filters['status']) && $filters['status'] === '0' ? 'selected' : '' ?>>Hidden</option>
+                <option value="approved" <?= ($status ?? '') === 'approved' ? 'selected' : '' ?>>Approved</option>
+                <option value="pending"  <?= ($status ?? '') === 'pending'  ? 'selected' : '' ?>>Pending</option>
+                <option value="rejected" <?= ($status ?? '') === 'rejected' ? 'selected' : '' ?>>Rejected</option>
             </select>
             <button class="btn btn-sm btn-secondary">Filter</button>
-            <a href="/manager/listings" class="btn btn-sm btn-outline-secondary">Clear</a>
-            <span class="ml-auto text-muted" style="font-size:.8rem"><?= number_format($total) ?> listings</span>
+            <a href="<?= site_url() ?>manager/listings" class="btn btn-sm btn-outline-secondary">Clear</a>
+            <a href="<?= site_url() ?>manager/listings/create" class="btn btn-sm btn-brand ml-auto">
+                <i class="fas fa-plus mr-1"></i> New Listing
+            </a>
+            <span class="text-muted" style="font-size:.8rem"><?= number_format($total) ?> listings</span>
         </form>
     </div>
 </div>
@@ -51,12 +55,9 @@
                 <?php foreach ($listings as $l): ?>
                 <tr>
                     <td>
-                        <a href="/manager/listings/<?= $l['id'] ?>" style="color:#7F77DD;font-size:.85rem">
+                        <a href="<?= site_url() ?>manager/listings/<?= $l['id'] ?>" style="color:#7F77DD;font-size:.85rem">
                             <?= esc(mb_strimwidth($l['title'], 0, 55, '…')) ?>
                         </a>
-                        <?php if ($l['is_featured']): ?>
-                        <span class="badge badge-warning badge-sm ml-1">Featured</span>
-                        <?php endif; ?>
                     </td>
                     <td style="font-size:.8rem;color:#888"><?= esc($l['category_name'] ?? '—') ?></td>
                     <td>
@@ -68,11 +69,18 @@
                         if ($t): ?><span class="badge <?= $t[1] ?>"><?= $t[0] ?></span><?php endif; ?>
                     </td>
                     <td style="font-size:.8rem;color:#888"><?= $l['date'] ? date('M j Y', strtotime($l['date'])) : '—' ?></td>
-                    <td><span class="badge <?= $l['is_active'] ? 'badge-success' : 'badge-secondary' ?>"><?= $l['is_active'] ? 'Active' : 'Hidden' ?></span></td>
+                    <td>
+                        <?php
+                        $smap = ['approved'=>['Approved','badge-success'],'pending'=>['Pending','badge-warning'],'rejected'=>['Rejected','badge-danger']];
+                        $sb = $smap[$l['status'] ?? ''] ?? ['Unknown','badge-secondary'];
+                        ?>
+                        <span class="badge <?= $sb[1] ?>"><?= $sb[0] ?></span>
+                    </td>
                     <td class="text-right">
-                        <a href="/manager/listings/<?= $l['id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
+                        <a href="<?= site_url() ?>manager/listings/<?= $l['id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
+                        <a href="<?= site_url() ?>manager/listings/<?= $l['id'] ?>/edit" class="btn btn-xs btn-outline-primary">Edit</a>
                         <button class="btn btn-xs <?= $l['is_active'] ? 'btn-outline-warning' : 'btn-outline-success' ?>"
-                                onclick="toggleListing(<?= $l['id'] ?>, <?= $l['is_active'] ? 0 : 1 ?>)">
+                                onclick="toggleListing(<?= $l['id'] ?>)">
                             <?= $l['is_active'] ? 'Hide' : 'Show' ?>
                         </button>
                     </td>
@@ -86,7 +94,7 @@
     </div>
     <?php if ($lastPage > 1): ?>
     <div class="card-footer" style="background:transparent;border-top:1px solid #2a2a2a">
-        <?= view('admin/_pagination', ['page' => $page, 'lastPage' => $lastPage, 'q' => $q ?? '']) ?>
+        <?= view('admin/_pagination', ['page' => $page, 'lastPage' => $lastPage, 'q' => $search ?? '']) ?>
     </div>
     <?php endif; ?>
 </div>
@@ -95,9 +103,9 @@
 
 <?= $this->section('scripts') ?>
 <script>
-function toggleListing(id, active) {
+function toggleListing(id) {
     fetch(`/manager/listings/${id}/toggle-status`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
+        .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error || 'Error'); });
 }
 </script>
 <?= $this->endSection() ?>

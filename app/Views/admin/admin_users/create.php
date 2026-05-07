@@ -15,7 +15,7 @@
                 </div>
                 <?php endif; ?>
 
-                <form method="post" action="/manager/admin-users/create">
+                <form method="post" action="<?= site_url() ?>manager/admin-users/create">
                     <?= csrf_field() ?>
 
                     <div class="form-group">
@@ -50,7 +50,7 @@
 
                     <div class="d-flex gap-2 mt-4">
                         <button type="submit" class="btn btn-brand">Create Admin User</button>
-                        <a href="/manager/admin-users" class="btn btn-outline-secondary">Cancel</a>
+                        <a href="<?= site_url() ?>manager/admin-users" class="btn btn-outline-secondary">Cancel</a>
                     </div>
                 </form>
             </div>

@@ -17,6 +17,9 @@ $routes->options('(:any)', static function () {
 // ── v1 API group ──────────────────────────────────────────────────────────────
 $routes->group('v1', static function (RouteCollection $routes): void {
 
+    // ── Media proxy (public — no auth, serves S3 objects via presigned redirect) ─
+    $routes->get('media', 'MediaController::serve');
+
     // ── Auth (public) ─────────────────────────────────────────────────────────
     $routes->group('auth', static function (RouteCollection $routes): void {
         $routes->post('login',    'Auth\AuthController::login');
@@ -70,7 +73,9 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->post('live/(:num)/join',         'Live\LiveController::join/$1');
         $routes->post('live/(:num)/end',          'Live\LiveController::end/$1');
         $routes->post('live/(:num)/cohost',       'Live\LiveController::addCohost/$1');
+        $routes->post('live/(:num)/cohost-join',  'Live\LiveController::cohostJoin/$1');
         $routes->delete('live/(:num)/cohost',     'Live\LiveController::removeCohost/$1');
+        $routes->get('live/(:num)/comments',      'Live\LiveController::getComments/$1');
         $routes->post('live/(:num)/comment',      'Live\LiveController::comment/$1');
         $routes->post('live/(:num)/react',        'Live\LiveController::react/$1');
         $routes->post('live/(:num)/report',       'Live\LiveController::reportSession/$1');
@@ -80,8 +85,11 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         // ── Posts ─────────────────────────────────────────────────────────────
         $routes->get('posts',                   'Posts\PostsController::index');
         $routes->post('posts',                  'Posts\PostsController::create');
+        $routes->post('posts/(:num)/like',      'Posts\PostsController::like/$1');
         $routes->get('posts/(:num)/comments',   'Posts\PostsController::comments/$1');
         $routes->post('posts/(:num)/comments',  'Posts\PostsController::addComment/$1');
+        $routes->get('users/(:num)/posts',      'Posts\PostsController::byUser/$1');
+        $routes->get('users/(:num)/chapters',   'Profile\ProfileTabsController::userChapters/$1');
 
         // ── Profile tabs ──────────────────────────────────────────────────────
         $routes->get('profile/posts',    'Profile\ProfileTabsController::posts');
@@ -155,6 +163,12 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->post('chapters/(:num)/join',        'Chapters\ChaptersController::join/$1');
         $routes->get('chapters/(:num)/feed',         'Chapters\ChaptersController::feed/$1');
 
+        // ── Chapter group chat (messages) ─────────────────────────────────────
+        $routes->get('chapters/(:num)/messages',                    'Chapters\ChapterMessagesController::index/$1');
+        $routes->post('chapters/(:num)/messages',                   'Chapters\ChapterMessagesController::create/$1');
+        $routes->delete('chapters/(:num)/messages/(:num)',          'Chapters\ChapterMessagesController::delete/$1/$2');
+        $routes->post('chapters/(:num)/messages/(:num)/react',      'Chapters\ChapterMessagesController::react/$1/$2');
+
         // ── Black Census ──────────────────────────────────────────────────────
         $routes->post('census',                      'Census\CensusController::submit');
 
@@ -162,16 +176,35 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->get('marketplace',                  'Marketplace\MarketplaceController::index');
         $routes->get('marketplace/categories',       'Marketplace\MarketplaceController::categories');
 
+        // ── Storefront Activation (platform Stripe fee) ───────────────────────
+        $routes->post('marketplace/activation/create-session', 'Marketplace\ActivationController::createSession');
+        $routes->get('marketplace/activation/status',          'Marketplace\ActivationController::status');
+
+        // ── Vendor payment gateway sessions (vendor → customer) ───────────────
+        $routes->post('marketplace/orders/(:num)/pay',            'Marketplace\PaymentController::createOrderPayment/$1');
+        $routes->post('marketplace/orders/(:num)/confirm-payment', 'Marketplace\PaymentController::confirmPayment/$1');
+        $routes->get('marketplace/vendors/(:num)/gateways',       'Marketplace\PaymentController::vendorGateways/$1');
+
+
         // ── Vendors ───────────────────────────────────────────────────────────
-        $routes->get('vendors',                      'Marketplace\VendorsController::index');
-        $routes->post('vendors',                     'Marketplace\VendorsController::create');
-        $routes->get('vendors/my',                   'Marketplace\VendorsController::myStore');
+        $routes->get('vendors',                                  'Marketplace\VendorsController::index');
+        $routes->post('vendors',                                 'Marketplace\VendorsController::create');
+        $routes->get('vendors/my/payment-settings',              'Marketplace\VendorsController::getPaymentSettings');
+        $routes->get('vendors/my',                               'Marketplace\VendorsController::myStore');
         $routes->get('vendors/(:num)',               'Marketplace\VendorsController::show/$1');
         $routes->put('vendors/(:num)',               'Marketplace\VendorsController::update/$1');
         $routes->post('vendors/(:num)',              'Marketplace\VendorsController::update/$1');
         $routes->put('vendors/(:num)/payment-settings', 'Marketplace\VendorsController::paymentSettings/$1');
         $routes->post('vendors/(:num)/payment-settings', 'Marketplace\VendorsController::paymentSettings/$1');
         $routes->post('vendors/(:num)/products',     'Marketplace\ProductsController::create/$1');
+
+        // ── Admin vendor management ───────────────────────────────────────────
+        $routes->get('admin/vendors',                    'Admin\VendorsAdminController::index');
+        $routes->put('admin/vendors/(:num)/approve',     'Admin\VendorsAdminController::approve/$1');
+        $routes->put('admin/vendors/(:num)/reject',      'Admin\VendorsAdminController::reject/$1');
+        $routes->get('admin/platform-settings',          'Admin\VendorsAdminController::platformSettings');
+        $routes->put('admin/platform-settings',          'Admin\VendorsAdminController::platformSettings');
+        $routes->get('admin/vendors/revenue',            'Admin\VendorsAdminController::revenue');
 
         // ── Products ──────────────────────────────────────────────────────────
         $routes->get('products/(:num)',              'Marketplace\ProductsController::show/$1');
@@ -187,6 +220,17 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->get('orders',                       'Marketplace\OrdersController::myOrders');
         $routes->put('orders/(:num)/status',         'Marketplace\OrdersController::updateStatus/$1');
     });
+
+    // ── No-auth: payment gateway redirects & webhooks (no Bearer token) ─────────
+    $routes->get('marketplace/flutterwave-checkout',        'Marketplace\PaymentController::flutterwaveCheckout');
+    $routes->get( 'marketplace/activation/paid',            'Marketplace\ActivationController::paid');
+    $routes->get( 'marketplace/activation/cancel',          'Marketplace\ActivationController::paid');
+    $routes->post('marketplace/activation/webhook',         'Marketplace\ActivationController::webhook');
+    $routes->post('marketplace/webhooks/stripe',            'Marketplace\PaymentController::stripeWebhook');
+    $routes->post('marketplace/webhooks/paypal',            'Marketplace\PaymentController::paypalWebhook');
+    $routes->post('marketplace/webhooks/flutterwave',       'Marketplace\PaymentController::flutterwaveWebhook');
+    $routes->get('marketplace/orders/(:num)/payment-success', 'Marketplace\OrdersController::paymentSuccess/$1');
+    $routes->get('marketplace/orders/(:num)/payment-cancel',  'Marketplace\OrdersController::paymentCancel/$1');
 });
 
 // ── Admin Manager (session-based, no JWT) ─────────────────────────────────────
@@ -210,6 +254,10 @@ $routes->group('manager', ['filter' => 'adminauth'], static function (RouteColle
 
     // Listings
     $routes->get( 'listings',                       'ListingsController::index');
+    $routes->get( 'listings/create',                'ListingsController::create');
+    $routes->post('listings/create',                'ListingsController::store');
+    $routes->get( 'listings/(:num)/edit',           'ListingsController::edit/$1');
+    $routes->post('listings/(:num)/edit',           'ListingsController::update/$1');
     $routes->get( 'listings/(:num)',                'ListingsController::show/$1');
     $routes->post('listings/(:num)/toggle-status',  'ListingsController::toggleStatus/$1');
     $routes->post('listings/(:num)/trust',          'ListingsController::updateTrust/$1');
@@ -248,12 +296,21 @@ $routes->group('manager', ['filter' => 'adminauth'], static function (RouteColle
 
     // Marketplace management
     $routes->get( 'marketplace',                              'MarketplaceController::index');
+    $routes->get( 'marketplace/payment-settings',             'MarketplaceController::paymentSettings');
+    $routes->post('marketplace/payment-settings/save',        'MarketplaceController::savePaymentSettings');
     $routes->get( 'marketplace/vendors/(:num)',               'MarketplaceController::showVendor/$1');
     $routes->post('marketplace/vendors/(:num)/toggle',        'MarketplaceController::toggleVendor/$1');
+    $routes->post('marketplace/vendors/(:num)/approve',       'MarketplaceController::approveVendor/$1');
+    $routes->post('marketplace/vendors/(:num)/reject',        'MarketplaceController::rejectVendor/$1');
+    $routes->get( 'marketplace/vendors/(:num)/test-payment',  'MarketplaceController::testActivationPayment/$1');
     $routes->get( 'marketplace/products',                     'MarketplaceController::products');
     $routes->post('marketplace/products/(:num)/toggle',       'MarketplaceController::toggleProduct/$1');
     $routes->get( 'marketplace/orders',                       'MarketplaceController::orders');
     $routes->post('marketplace/orders/(:num)/status',         'MarketplaceController::updateOrderStatus/$1');
+
+    // Black Census submissions
+    $routes->get( 'census',                                   'CensusController::index');
+    $routes->get( 'census/export',                            'CensusController::export');
 
     // Admin user management (super_admin only)
     $routes->get( 'admin-users',                              'AdminUsersController::index');

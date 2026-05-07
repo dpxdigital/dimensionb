@@ -14,7 +14,9 @@ class AdminAuthFilter implements FilterInterface
         $path    = $request->getUri()->getPath();
 
         // Allow login/logout through without session check
-        if (in_array(rtrim($path, '/'), ['/manager/login', '/manager/logout'], true)) {
+        // Use str_ends_with to handle subdirectory installs (e.g. /api/manager/login)
+        $trimmedPath = rtrim($path, '/');
+        if (str_ends_with($trimmedPath, '/manager/login') || str_ends_with($trimmedPath, '/manager/logout')) {
             return;
         }
 
@@ -22,11 +24,11 @@ class AdminAuthFilter implements FilterInterface
         $lastActivity = $session->get('admin_last_activity');
         if ($lastActivity && (time() - $lastActivity) > 7200) {
             $session->destroy();
-            return redirect()->to('/manager/login')->with('error', 'Session expired. Please log in again.');
+            return redirect()->to(site_url('manager/login'))->with('error', 'Session expired. Please log in again.');
         }
 
         if (! $session->get('admin_logged_in')) {
-            return redirect()->to('/manager/login');
+            return redirect()->to(site_url('manager/login'));
         }
 
         $session->set('admin_last_activity', time());
@@ -51,7 +53,7 @@ class AdminAuthFilter implements FilterInterface
             }
 
             if (! $isAllowed && in_array('super_only', (array) $arguments, true)) {
-                return redirect()->to('/manager')->with('error', 'Access denied.');
+                return redirect()->to(site_url('manager'))->with('error', 'Access denied.');
             }
         }
     }

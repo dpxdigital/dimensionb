@@ -63,7 +63,7 @@
                         <?php foreach ($mostSaved as $i => $item): ?>
                         <tr>
                             <td style="color:#666;font-size:.8rem"><?= $i+1 ?></td>
-                            <td style="font-size:.82rem"><a href="/manager/listings/<?= $item['id'] ?>" style="color:#7F77DD"><?= esc(mb_strimwidth($item['title'] ?? '—', 0, 35, '…')) ?></a></td>
+                            <td style="font-size:.82rem"><a href="<?= site_url() ?>manager/listings/<?= $item['id'] ?>" style="color:#7F77DD"><?= esc(mb_strimwidth($item['title'] ?? '—', 0, 35, '…')) ?></a></td>
                             <td style="font-size:.82rem;color:#7F77DD"><?= number_format($item['save_count']) ?></td>
                         </tr>
                         <?php endforeach; ?>
@@ -85,7 +85,7 @@
                         <?php foreach ($mostRsvped as $i => $item): ?>
                         <tr>
                             <td style="color:#666;font-size:.8rem"><?= $i+1 ?></td>
-                            <td style="font-size:.82rem"><a href="/manager/listings/<?= $item['id'] ?>" style="color:#7F77DD"><?= esc(mb_strimwidth($item['title'] ?? '—', 0, 35, '…')) ?></a></td>
+                            <td style="font-size:.82rem"><a href="<?= site_url() ?>manager/listings/<?= $item['id'] ?>" style="color:#7F77DD"><?= esc(mb_strimwidth($item['title'] ?? '—', 0, 35, '…')) ?></a></td>
                             <td style="font-size:.82rem;color:#EF9F27"><?= number_format($item['rsvp_count']) ?></td>
                         </tr>
                         <?php endforeach; ?>

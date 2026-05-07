@@ -137,6 +137,28 @@ class VendorsController extends BaseApiController
         return $this->success($this->formatVendor($updated), 'Vendor updated');
     }
 
+    // ── GET /v1/vendors/my/payment-settings ──────────────────────────────────
+
+    public function getPaymentSettings(): ResponseInterface
+    {
+        $userId = $this->authUserId();
+        $vendor = $this->db()->table('vendors')->where('user_id', $userId)->get()->getRowArray();
+        if (! $vendor) return $this->error('No vendor store found.', 404);
+
+        return $this->success([
+            'stripe_enabled'       => (bool) ($vendor['stripe_enabled']      ?? false),
+            'paypal_enabled'       => (bool) ($vendor['paypal_enabled']       ?? false),
+            'flutterwave_enabled'  => (bool) ($vendor['flutterwave_enabled']  ?? false),
+            'has_stripe_keys'      => ! empty($vendor['stripe_publishable_key']),
+            'has_paypal_keys'      => ! empty($vendor['paypal_client_id']),
+            'has_flutterwave_keys' => ! empty($vendor['flutterwave_public_key']),
+            'free_shipping'        => (bool) ($vendor['free_shipping']        ?? false),
+            'shipping_rate'        => (float) ($vendor['shipping_rate']       ?? 0),
+            'delivery_time'        => $vendor['delivery_time'] ?? '3-5 business days',
+            'is_activated'         => (bool) ($vendor['is_activated']         ?? false),
+        ]);
+    }
+
     // ── GET /v1/vendors/my ────────────────────────────────────────────────────
 
     public function myStore(): ResponseInterface

@@ -29,26 +29,19 @@ class SearchController extends BaseApiController
         $model = new ListingModel();
         $model->withMeta($userId)->active();
 
-        // ── Full-text search ──────────────────────────────────────────────────
+        // ── Text search (LIKE) ────────────────────────────────────────────────
         if ($q !== '') {
-            if (strlen($q) >= 3) {
-                // MySQL FULLTEXT boolean mode for partial-word matching
-                $safeQ = $this->escapeFulltextQuery($q);
-                $model->select("listings.*, MATCH(listings.title, listings.description) AGAINST ('{$safeQ}' IN BOOLEAN MODE) AS relevance", false)
-                      ->where("MATCH(listings.title, listings.description) AGAINST ('{$safeQ}' IN BOOLEAN MODE)");
-            } else {
-                // Short query: LIKE fallback
-                $model->groupStart()
-                      ->like('listings.title', $q)
-                      ->orLike('listings.description', $q)
-                      ->groupEnd();
-            }
+            $model->groupStart()
+                  ->like('listings.title', $q)
+                  ->orLike('listings.org_name', $q)
+                  ->orLike('listings.description', $q)
+                  ->groupEnd();
         }
 
         // ── Category filter ───────────────────────────────────────────────────
+        // Use the alias 'c' already joined by withMeta()
         if ($category !== null) {
-            $model->join('categories sc', 'sc.id = listings.category_id', 'left')
-                  ->where('sc.slug', $category);
+            $model->where('c.slug', $category);
         }
 
         // ── Trust level filter ────────────────────────────────────────────────
@@ -75,11 +68,7 @@ class SearchController extends BaseApiController
         }
 
         // ── Ordering ──────────────────────────────────────────────────────────
-        if ($q !== '' && strlen($q) >= 3) {
-            $model->orderBy('relevance', 'DESC');
-        } else {
-            $model->orderBy('listings.created_at', 'DESC');
-        }
+        $model->orderBy('listings.created_at', 'DESC');
 
         // ── Count total (clone DB state before pagination) ────────────────────
         // CI4 doesn't have an easy countAll after complex joins, so we use a subquery trick
@@ -129,15 +118,4 @@ class SearchController extends BaseApiController
         ]);
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private function escapeFulltextQuery(string $q): string
-    {
-        // Strip characters that break MySQL FULLTEXT boolean mode
-        $q = preg_replace('/[+\-><()*~"@]+/', ' ', $q);
-        // Wrap each word with + for AND matching
-        $words = array_filter(explode(' ', trim($q)));
-        $parts = array_map(fn(string $w) => "+{$w}*", $words);
-        return implode(' ', $parts);
-    }
 }

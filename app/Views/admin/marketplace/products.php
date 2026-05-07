@@ -11,7 +11,7 @@
                    placeholder="Search product or vendor name…" value="<?= esc($q ?? '') ?>">
             <button class="btn btn-sm btn-secondary">Search</button>
             <?php if (!empty($q)): ?>
-            <a href="/manager/marketplace/products" class="btn btn-sm btn-outline-secondary">Clear</a>
+            <a href="<?= site_url() ?>manager/marketplace/products" class="btn btn-sm btn-outline-secondary">Clear</a>
             <?php endif; ?>
             <span class="ml-auto text-muted" style="font-size:.8rem"><?= number_format($total) ?> products</span>
         </form>

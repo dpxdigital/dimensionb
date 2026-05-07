@@ -4,9 +4,40 @@
 
 <!-- Vendor Info Card -->
 <div class="card mb-4" style="background:#161616;border:1px solid #2a2a2a">
-    <div class="card-header d-flex justify-content-between align-items-center" style="background:transparent;border-bottom:1px solid #2a2a2a">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2" style="background:transparent;border-bottom:1px solid #2a2a2a">
         <h3 class="card-title mb-0" style="color:#fff;font-size:.95rem">Vendor Information</h3>
-        <div>
+        <div class="d-flex gap-2 flex-wrap align-items-center">
+            <!-- Activation fee badge -->
+            <?php if ($vendor['activation_fee_paid']): ?>
+            <span class="badge badge-success">Fee Paid · $<?= number_format($vendor['activation_fee_amount'] ?? 0, 2) ?></span>
+            <?php else: ?>
+            <span class="badge badge-secondary">Fee Unpaid</span>
+            <?php endif; ?>
+
+            <!-- Approval status & actions -->
+            <?php if ($vendor['is_approved']): ?>
+            <span class="badge badge-success" id="approval-badge">Approved</span>
+            <button class="btn btn-sm btn-outline-danger" onclick="openRejectModal(<?= $vendor['id'] ?>)">Revoke</button>
+            <?php else: ?>
+            <?php if (!empty($vendor['rejection_reason'])): ?>
+            <span class="badge badge-danger" id="approval-badge">Rejected</span>
+            <?php else: ?>
+            <span class="badge badge-warning" id="approval-badge">Not Approved</span>
+            <?php endif; ?>
+            <button class="btn btn-sm btn-outline-success" onclick="approveVendor(<?= $vendor['id'] ?>)">Approve</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="openRejectModal(<?= $vendor['id'] ?>)">Reject</button>
+            <?php endif; ?>
+
+            <!-- Test payment (only if fee not yet paid) -->
+            <?php if (! $vendor['activation_fee_paid']): ?>
+            <a href="<?= site_url() ?>manager/marketplace/vendors/<?= $vendor['id'] ?>/test-payment"
+               class="btn btn-sm btn-outline-primary"
+               onclick="return confirm('This will open a real Stripe Checkout page. Continue?')">
+               Test Payment
+            </a>
+            <?php endif; ?>
+
+            <!-- Active toggle -->
             <span class="badge <?= $vendor['is_active'] ? 'badge-success' : 'badge-secondary' ?> mr-2" id="vendor-status-badge">
                 <?= $vendor['is_active'] ? 'Active' : 'Inactive' ?>
             </span>
@@ -17,6 +48,11 @@
             </button>
         </div>
     </div>
+    <?php if (!empty($vendor['rejection_reason'])): ?>
+    <div class="px-3 py-2" style="background:#2a1212;border-bottom:1px solid #3a1a1a">
+        <small style="color:#D94032"><strong>Rejection reason:</strong> <?= esc($vendor['rejection_reason']) ?></small>
+    </div>
+    <?php endif; ?>
     <div class="card-body">
         <div class="row">
             <div class="col-md-6">
@@ -145,6 +181,24 @@
 
 <?= $this->endSection() ?>
 
+<!-- Reject Modal -->
+<div id="rejectModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;align-items:center;justify-content:center">
+    <div style="background:#161616;border:1px solid #2a2a2a;border-radius:8px;padding:24px;max-width:420px;width:90%">
+        <h5 style="color:#fff;margin-bottom:12px">Reject Vendor</h5>
+        <input type="hidden" id="rejectVendorId">
+        <div class="mb-3">
+            <label style="color:#ccc;font-size:.82rem" class="form-label">Reason <span style="color:#D94032">*</span></label>
+            <textarea id="rejectReason" class="form-control form-control-sm" rows="3"
+                      placeholder="Provide a clear rejection reason…"
+                      style="background:#1E1E1E;border-color:#333;color:#fff"></textarea>
+        </div>
+        <div class="d-flex gap-2 justify-content-end">
+            <button class="btn btn-sm btn-outline-secondary" onclick="closeRejectModal()">Cancel</button>
+            <button class="btn btn-sm btn-danger" onclick="submitReject()">Reject Vendor</button>
+        </div>
+    </div>
+</div>
+
 <?= $this->section('scripts') ?>
 <script>
 function toggleVendor(id, activate) {
@@ -164,6 +218,56 @@ function toggleVendor(id, activate) {
         btn.className = `btn btn-sm ${isActive ? 'btn-outline-warning' : 'btn-outline-success'}`;
         btn.textContent = isActive ? 'Suspend Vendor' : 'Activate Vendor';
         btn.setAttribute('onclick', `toggleVendor(${id}, ${isActive ? 0 : 1})`);
+    })
+    .catch(() => alert('Request failed'));
+}
+
+function approveVendor(id) {
+    if (!confirm('Approve this vendor?')) return;
+    fetch(`/manager/marketplace/vendors/${id}/approve`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { alert(d.error); return; }
+        const badge = document.getElementById('approval-badge');
+        if (badge) { badge.className = 'badge badge-success'; badge.textContent = 'Approved'; }
+        document.querySelectorAll('.btn-outline-success,.btn-outline-danger').forEach(b => {
+            if (b.textContent.trim() === 'Approve' || b.textContent.trim() === 'Reject') b.remove();
+        });
+    })
+    .catch(() => alert('Request failed'));
+}
+
+function openRejectModal(id) {
+    document.getElementById('rejectVendorId').value = id;
+    document.getElementById('rejectReason').value = '';
+    document.getElementById('rejectModal').style.display = 'flex';
+}
+function closeRejectModal() {
+    document.getElementById('rejectModal').style.display = 'none';
+}
+function submitReject() {
+    const id     = document.getElementById('rejectVendorId').value;
+    const reason = document.getElementById('rejectReason').value.trim();
+    if (!reason) { alert('Reason is required.'); return; }
+    const body = new FormData();
+    body.append('reason', reason);
+    fetch(`/manager/marketplace/vendors/${id}/reject`, {
+        method: 'POST',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        body
+    })
+    .then(r => r.json())
+    .then(d => {
+        if (d.error) { alert(d.error); return; }
+        closeRejectModal();
+        const badge = document.getElementById('approval-badge');
+        if (badge) { badge.className = 'badge badge-danger'; badge.textContent = 'Rejected'; }
+        document.querySelectorAll('.btn-outline-success,.btn-outline-danger').forEach(b => {
+            if (b.textContent.trim() === 'Approve' || b.textContent.trim() === 'Reject') b.remove();
+        });
     })
     .catch(() => alert('Request failed'));
 }

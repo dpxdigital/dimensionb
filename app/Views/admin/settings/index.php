@@ -12,14 +12,13 @@
             </div>
             <div class="card-body p-0">
                 <table class="table table-sm table-dark mb-0" style="--bs-table-bg:#161616">
-                    <thead><tr><th>Name</th><th>Slug</th><th>Icon</th><th>Status</th><th></th></tr></thead>
+                    <thead><tr><th>Name</th><th>Slug</th><th>Icon</th><th></th></tr></thead>
                     <tbody>
                         <?php foreach ($categories as $cat): ?>
                         <tr>
                             <td style="font-size:.82rem;color:#ddd"><?= esc($cat['name']) ?></td>
                             <td style="font-size:.8rem;color:#888"><?= esc($cat['slug']) ?></td>
                             <td style="font-size:.8rem;color:#888"><?= esc($cat['icon_name'] ?? '—') ?></td>
-                            <td><span class="badge <?= $cat['is_active'] ? 'badge-success' : 'badge-secondary' ?>"><?= $cat['is_active'] ? 'Active' : 'Hidden' ?></span></td>
                             <td><button class="btn btn-xs btn-outline-secondary"
                                         onclick='openCategoryModal(<?= json_encode($cat) ?>)'>Edit</button></td>
                         </tr>
@@ -105,10 +104,6 @@
                     <input type="text" id="catIcon" class="form-control form-control-sm"
                            style="background:#1E1E1E;border-color:#333;color:#fff">
                 </div>
-                <div class="form-check">
-                    <input type="checkbox" class="form-check-input" id="catActive" checked>
-                    <label class="form-check-label" style="color:#aaa;font-size:.82rem" for="catActive">Active</label>
-                </div>
             </div>
             <div class="modal-footer" style="border-top:1px solid #2a2a2a">
                 <button type="button" class="btn btn-sm btn-secondary" data-dismiss="modal">Cancel</button>
@@ -127,7 +122,6 @@ function openCategoryModal(cat) {
     document.getElementById('catName').value = cat ? cat.name : '';
     document.getElementById('catSlug').value = cat ? cat.slug : '';
     document.getElementById('catIcon').value = cat ? (cat.icon_name || '') : '';
-    document.getElementById('catActive').checked = cat ? !!parseInt(cat.is_active) : true;
     document.getElementById('catModalTitle').textContent = cat ? 'Edit Category' : 'Add Category';
     $('#categoryModal').modal('show');
 }
@@ -137,7 +131,6 @@ function saveCategory() {
     fd.append('name',      document.getElementById('catName').value);
     fd.append('slug',      document.getElementById('catSlug').value);
     fd.append('icon_name', document.getElementById('catIcon').value);
-    fd.append('is_active', document.getElementById('catActive').checked ? '1' : '0');
     fetch('/manager/settings/category/save', {
         method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd
     }).then(r => r.json()).then(d => {

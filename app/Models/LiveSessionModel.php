@@ -72,28 +72,37 @@ class LiveSessionModel extends Model
 
     // ── Formatting ────────────────────────────────────────────────────────────
 
-    public static function format(array $row, bool $includeToken = false): array
+    public static function format(array $row, ?string $token = null): array
     {
+        $validTrustLevels = [
+            'institution_verified', 'curator_reviewed', 'community_submitted',
+            'approved_live_host', 'needs_reconfirmation',
+        ];
+        $trustLevel = $row['host_trust_level'] ?? 'community_submitted';
+        if (! in_array($trustLevel, $validTrustLevels, true)) {
+            $trustLevel = 'community_submitted';
+        }
+
         $out = [
-            'id'                   => (int) $row['id'],
-            'hostId'               => (int) $row['host_id'],
-            'hostName'             => $row['host_name']        ?? null,
-            'hostAvatar'           => $row['host_avatar']      ?? null,
-            'hostTrustLevel'       => $row['host_trust_level'] ?? null,
-            'title'                => $row['title'],
-            'category'             => $row['category'],
-            'linkedListingId'      => $row['linked_listing_id'] ? (int) $row['linked_listing_id'] : null,
-            'linkedListingTitle'   => $row['linked_listing_title'] ?? null,
-            'agoraChannel'         => $row['agora_channel'],
-            'viewerCount'          => (int) $row['viewer_count'],
-            'status'               => $row['status'],
-            'startedAt'            => $row['started_at'],
-            'endedAt'              => $row['ended_at']   ?? null,
-            'replayUrl'            => $row['replay_url'] ?? null,
+            'id'                    => (string) $row['id'],
+            'host_id'               => (string) $row['host_id'],
+            'host_name'             => $row['host_name']   ?? 'Unknown',
+            'host_avatar_url'       => $row['host_avatar'] ?? null,
+            'host_trust_level'      => $trustLevel,
+            'title'                 => $row['title']    ?? '',
+            'category'              => $row['category'] ?? '',
+            'linked_listing_id'     => ! empty($row['linked_listing_id']) ? (string) $row['linked_listing_id'] : null,
+            'room_name'             => $row['agora_channel'] ?? '',
+            'viewer_count'          => (int) ($row['viewer_count'] ?? 0),
+            'status'                => $row['status']    ?? 'active',
+            'started_at'            => $row['started_at'] ?? $row['created_at'] ?? date('Y-m-d H:i:s'),
+            'ended_at'              => $row['ended_at']   ?? null,
+            'replay_url'            => $row['replay_url'] ?? null,
         ];
 
-        if ($includeToken) {
-            $out['agoraToken'] = $row['agora_token'];
+        if ($token !== null) {
+            $out['token']      = $token;
+            $out['server_url'] = 'wss://dim-z07mwg4s.livekit.cloud';
         }
 
         return $out;

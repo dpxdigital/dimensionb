@@ -11,7 +11,7 @@
                    placeholder="Search name / email…" value="<?= esc($q ?? '') ?>">
             <button class="btn btn-sm btn-secondary">Search</button>
             <?php if (!empty($q)): ?>
-            <a href="/manager/users" class="btn btn-sm btn-outline-secondary">Clear</a>
+            <a href="<?= site_url() ?>manager/users" class="btn btn-sm btn-outline-secondary">Clear</a>
             <?php endif; ?>
             <span class="ml-auto text-muted" style="font-size:.8rem"><?= number_format($total) ?> users</span>
         </form>
@@ -68,7 +68,7 @@
                         </span>
                     </td>
                     <td class="text-right">
-                        <a href="/manager/users/<?= $u['id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
+                        <a href="<?= site_url() ?>manager/users/<?= $u['id'] ?>" class="btn btn-xs btn-outline-secondary">View</a>
                         <button class="btn btn-xs <?= $u['is_active'] ? 'btn-outline-warning' : 'btn-outline-success' ?>"
                                 onclick="toggleUser(<?= $u['id'] ?>, <?= $u['is_active'] ? 0 : 1 ?>)">
                             <?= $u['is_active'] ? 'Ban' : 'Unban' ?>

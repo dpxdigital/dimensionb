@@ -3,7 +3,7 @@
 <?= $this->section('content') ?>
 
 <div class="mb-3 d-flex justify-content-end">
-    <a href="/manager/admin-users/create" class="btn btn-brand btn-sm">
+    <a href="<?= site_url() ?>manager/admin-users/create" class="btn btn-brand btn-sm">
         <i class="fas fa-plus mr-1"></i> Create Admin User
     </a>
 </div>

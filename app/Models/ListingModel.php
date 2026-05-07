@@ -154,11 +154,11 @@ class ListingModel extends Model
             'id'            => (string) $row['id'],
             'title'         => (string) $row['title'],
             'description'   => (string) ($row['description'] ?? ''),
-            'category'      => $row['category_slug']  ?? null,
+            'category'      => (string) ($row['category_slug'] ?? ''),
             'category_name' => $row['category_name']  ?? null,
             'category_icon' => $row['category_icon']  ?? null,
             'org_name'      => (string) ($row['org_name'] ?? ''),
-            'trust_level'   => $row['trust_level'],
+            'trust_level'   => (string) ($row['trust_level'] ?? 'community_submitted'),
             'trust_label'   => (string) ($row['trust_label'] ?? ''),
             'location'      => $row['location']     ?? null,
             'date'          => $row['date']         ?? null,
@@ -166,7 +166,7 @@ class ListingModel extends Model
             'action_type'   => $row['action_type']  ?? null,
             'is_live'       => (bool) ($row['is_live'] ?? false),
             'external_url'  => $row['external_url'] ?? null,
-            'image_url'     => $row['cover_url']    ?? null,
+            'image_url'     => self::proxyS3Url($row['cover_url'] ?? null),
             'like_count'    => (int)  ($row['like_count']    ?? 0),
             'comment_count' => (int)  ($row['comment_count'] ?? 0),
             'is_saved'      => (bool) ($row['is_saved']  ?? false),
@@ -174,5 +174,30 @@ class ListingModel extends Model
             'is_liked'      => (bool) ($row['is_liked']  ?? false),
             'created_at'    => $row['created_at'] ?? null,
         ];
+    }
+
+    /** Rewrite S3 and legacy domain URLs to the current proxy base URL */
+    private static function proxyS3Url(?string $url): ?string
+    {
+        if ($url === null || $url === '') return null;
+        $base = rtrim(base_url(), '/');
+
+        // Direct S3 URL → proxy via /v1/media?key=
+        if (str_contains($url, 'amazonaws.com')) {
+            $key = ltrim(parse_url($url, PHP_URL_PATH) ?? '', '/');
+            if ($key === '') return $url;
+            return $base . '/v1/media?key=' . urlencode($key);
+        }
+
+        // Old api.dimensions.global proxy URL → rewrite to current base
+        if (str_contains($url, 'api.dimensions.global')) {
+            $parsed = parse_url($url);
+            parse_str($parsed['query'] ?? '', $qs);
+            if (!empty($qs['key'])) {
+                return $base . '/v1/media?key=' . urlencode($qs['key']);
+            }
+        }
+
+        return $url;
     }
 }

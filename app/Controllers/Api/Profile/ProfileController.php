@@ -39,7 +39,7 @@ class ProfileController extends BaseApiController
             'interests'       => $withInt['interests'] ?? [],
             'followers_count' => $followersCount,
             'following_count' => $followingCount,
-            'listings_count'  => (int) ($withInt['listings_count'] ?? 0),
+            'listings_count'  => (int) $db->table('posts')->where('user_id', (int) $id)->countAllResults(),
             'trust_level'     => $withInt['trust_level'] ?? null,
             'trust_label'     => $withInt['trust_label'] ?? null,
             'is_vendor'       => (bool) ($withInt['is_vendor'] ?? false),

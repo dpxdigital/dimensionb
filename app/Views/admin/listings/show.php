@@ -2,6 +2,13 @@
 
 <?= $this->section('content') ?>
 
+<?php if (session()->getFlashdata('success')): ?>
+<div class="alert alert-success py-2 mb-3" style="font-size:.85rem"><?= esc(session()->getFlashdata('success')) ?></div>
+<?php endif; ?>
+<?php if (session()->getFlashdata('error')): ?>
+<div class="alert alert-danger py-2 mb-3" style="font-size:.85rem"><?= esc(session()->getFlashdata('error')) ?></div>
+<?php endif; ?>
+
 <div class="row">
     <div class="col-lg-8">
         <div class="card mb-3" style="background:#161616;border:1px solid #2a2a2a">
@@ -51,6 +58,9 @@
         </div>
 
         <div class="d-grid gap-2">
+            <a href="<?= site_url() ?>manager/listings/<?= $listing['id'] ?>/edit" class="btn btn-sm btn-brand">
+                <i class="fas fa-edit mr-1"></i> Edit Listing
+            </a>
             <button class="btn btn-sm <?= $listing['is_active'] ? 'btn-outline-warning' : 'btn-outline-success' ?>"
                     onclick="toggleListing(<?= $listing['id'] ?>, <?= $listing['is_active'] ? 0 : 1 ?>)">
                 <?= $listing['is_active'] ? 'Hide Listing' : 'Show Listing' ?>
