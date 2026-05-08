@@ -78,9 +78,10 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function toggleAdmin(id, currentActive) {
     if (! confirm(currentActive ? 'Disable this admin user?' : 'Enable this admin user?')) return;
-    fetch(`/manager/admin-users/${id}/toggle`, {
+    fetch(BASE + `/manager/admin-users/${id}/toggle`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
         body: JSON.stringify({})

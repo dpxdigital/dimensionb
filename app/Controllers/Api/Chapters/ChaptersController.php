@@ -202,6 +202,46 @@ class ChaptersController extends BaseApiController
         return $this->success($this->formatChapter($chapter), 'Chapter created', 201);
     }
 
+    // ── POST /v1/chapters/:id/cover ───────────────────────────────────────────
+
+    public function uploadCover($id = null): ResponseInterface
+    {
+        $userId  = $this->authUserId();
+        $chapter = $this->db()->table('chapters')->where('id', (int) $id)->where('is_active', 1)->get()->getRowArray();
+
+        if (! $chapter) return $this->error('Chapter not found.', 404);
+
+        // Only members can update the cover
+        $isMember = $this->db()->table('chapter_members')
+            ->where('chapter_id', (int) $id)->where('user_id', $userId)->countAllResults();
+
+        if (! $isMember) return $this->error('You must join this chapter to update its cover.', 403);
+
+        $imageFile = $this->request->getFile('image');
+        if (! $imageFile || ! $imageFile->isValid()) {
+            return $this->error('No valid image provided.', 422);
+        }
+
+        $ext     = strtolower($imageFile->getExtension());
+        $allowed = ['jpg', 'jpeg', 'png', 'webp'];
+        if (! in_array($ext, $allowed, true) || $imageFile->getSize() > 5 * 1024 * 1024) {
+            return $this->error('Invalid image. Use JPG, PNG, or WebP under 5 MB.', 422);
+        }
+
+        $fn = 'chapter_cover_' . $id . '_' . time() . '.' . $ext;
+        $imageFile->move(WRITEPATH . 'uploads/', $fn);
+
+        $s3       = new S3Uploader();
+        $imageUrl = $s3->uploadOrLocal(WRITEPATH . 'uploads/' . $fn, "uploads/chapters/{$fn}", "image/{$ext}", 'chapters');
+
+        $this->db()->table('chapters')->where('id', (int) $id)->set([
+            'image_url'  => $imageUrl,
+            'updated_at' => date('Y-m-d H:i:s'),
+        ])->update();
+
+        return $this->success(['image_url' => $imageUrl], 'Cover updated');
+    }
+
     private function formatChapter(array $row): array
     {
         return [

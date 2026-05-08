@@ -74,21 +74,22 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function updateTrust(id) {
     const trust = document.getElementById('trustSelect').value;
-    fetch(`/manager/listings/${id}/trust`, {
+    fetch(BASE + `/manager/listings/${id}/trust`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
         body: JSON.stringify({ trust_level: trust })
     }).then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
 }
 function toggleListing(id, active) {
-    fetch(`/manager/listings/${id}/toggle-status`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + `/manager/listings/${id}/toggle-status`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
 }
 function deleteListing(id) {
     if (!confirm('Delete this listing permanently?')) return;
-    fetch(`/manager/listings/${id}/delete`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + `/manager/listings/${id}/delete`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => { if (d.success) location.href = '/manager/listings'; else alert(d.error); });
 }
 </script>

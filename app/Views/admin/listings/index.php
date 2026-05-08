@@ -103,8 +103,9 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function toggleListing(id) {
-    fetch(`/manager/listings/${id}/toggle-status`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + `/manager/listings/${id}/toggle-status`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error || 'Error'); });
 }
 </script>

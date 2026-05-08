@@ -102,14 +102,15 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function toggleUser(id, active) {
     if (!confirm(active ? 'Unban this user?' : 'Ban this user?')) return;
-    fetch(`/manager/users/${id}/toggle-status`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + `/manager/users/${id}/toggle-status`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
 }
 function deleteUser(id) {
     if (!confirm('Permanently delete this user? This cannot be undone.')) return;
-    fetch(`/manager/users/${id}/delete`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + `/manager/users/${id}/delete`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => { if (d.success) location.href = '/manager/users'; else alert(d.error); });
 }
 </script>

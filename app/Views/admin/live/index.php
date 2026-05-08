@@ -70,14 +70,15 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function endSession(id) {
     if (!confirm('End this live session?')) return;
-    fetch(`/manager/live/${id}/end`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + `/manager/live/${id}/end`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
 }
 function deleteSession(id) {
     if (!confirm('Delete this session record?')) return;
-    fetch(`/manager/live/${id}/delete`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + `/manager/live/${id}/delete`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
 }
 </script>

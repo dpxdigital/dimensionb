@@ -83,6 +83,7 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 const badgeColors = {
     pending:'badge-warning', confirmed:'badge-info', shipped:'badge-primary',
     delivered:'badge-success', cancelled:'badge-danger'
@@ -90,7 +91,7 @@ const badgeColors = {
 
 function updateOrderStatus(id, newStatus, selectEl) {
     selectEl.disabled = true;
-    fetch(`/manager/marketplace/orders/${id}/status`, {
+    fetch(BASE + `/manager/marketplace/orders/${id}/status`, {
         method: 'POST',
         headers: {'Content-Type':'application/x-www-form-urlencoded', 'X-Requested-With':'XMLHttpRequest'},
         body: `status=${newStatus}`

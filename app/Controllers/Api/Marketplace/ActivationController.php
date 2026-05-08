@@ -183,12 +183,12 @@ class ActivationController extends BaseApiController
   <p>{$subtitle}</p>
   <a href="{$deepLink}" class="btn" id="openApp">Return to Dimensions</a>
   <p style="font-size:12px;color:rgba(255,255,255,.3);margin-top:8px">
-    If the app doesn't open, close this browser and return to Dimensions manually.
+    If the button doesn't work, close this browser tab and return to Dimensions.
   </p>
 </div>
 <script>
-  // Auto-attempt deep link after 800ms
-  setTimeout(function(){ window.location.href = '{$deepLink}'; }, 800);
+  // Attempt deep link navigation so the in-app WebView can intercept it
+  setTimeout(function(){ try { window.location.href = '{$deepLink}'; } catch(e) {} }, 500);
 </script>
 </body>
 </html>

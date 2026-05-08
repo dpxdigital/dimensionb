@@ -175,10 +175,11 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function toggleVendor(id, activate) {
     const label = activate ? 'Activate' : 'Suspend';
     if (!confirm(label + ' this vendor?')) return;
-    fetch(`/manager/marketplace/vendors/${id}/toggle`, {
+    fetch(BASE + `/manager/marketplace/vendors/${id}/toggle`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
@@ -199,7 +200,7 @@ function toggleVendor(id, activate) {
 
 function approveVendor(id) {
     if (!confirm('Approve this vendor?')) return;
-    fetch(`/manager/marketplace/vendors/${id}/approve`, {
+    fetch(BASE + `/manager/marketplace/vendors/${id}/approve`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })
@@ -231,7 +232,7 @@ function submitReject() {
     if (!reason) { alert('Reason is required.'); return; }
     const body = new FormData();
     body.append('reason', reason);
-    fetch(`/manager/marketplace/vendors/${id}/reject`, {
+    fetch(BASE + `/manager/marketplace/vendors/${id}/reject`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         body

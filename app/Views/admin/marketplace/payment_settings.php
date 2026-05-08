@@ -91,6 +91,7 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function saveSettings() {
     const btn     = document.getElementById('save-btn');
     const spinner = document.getElementById('save-spinner');
@@ -108,7 +109,7 @@ function saveSettings() {
         platform_stripe_webhook_secret:  document.getElementById('platform_stripe_webhook_secret').value,
     };
 
-    fetch('/manager/marketplace/payment-settings/save', {
+    fetch(BASE + '/manager/marketplace/payment-settings/save', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
         body:    JSON.stringify(payload),

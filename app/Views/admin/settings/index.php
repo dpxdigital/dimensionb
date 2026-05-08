@@ -117,6 +117,7 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function openCategoryModal(cat) {
     document.getElementById('catId').value   = cat ? cat.id   : '';
     document.getElementById('catName').value = cat ? cat.name : '';
@@ -131,7 +132,7 @@ function saveCategory() {
     fd.append('name',      document.getElementById('catName').value);
     fd.append('slug',      document.getElementById('catSlug').value);
     fd.append('icon_name', document.getElementById('catIcon').value);
-    fetch('/manager/settings/category/save', {
+    fetch(BASE + '/manager/settings/category/save', {
         method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd
     }).then(r => r.json()).then(d => {
         if (d.success) { $('#categoryModal').modal('hide'); location.reload(); } else alert(d.error);
@@ -139,7 +140,7 @@ function saveCategory() {
 }
 function rotateJwt() {
     if (!confirm('This will invalidate all active user sessions. Continue?')) return;
-    fetch('/manager/settings/jwt/rotate', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + '/manager/settings/jwt/rotate', { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => {
             const el = document.getElementById('jwtResult');
             if (d.success) el.innerHTML = `<span class="text-success"><i class="fas fa-check mr-1"></i>Rotated. Preview: ${d.preview}</span>`;
@@ -147,7 +148,7 @@ function rotateJwt() {
         });
 }
 function loadEnvVars() {
-    fetch('/manager/settings/env', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    fetch(BASE + '/manager/settings/env', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json()).then(d => {
             const rows = Object.entries(d).map(([k,v]) =>
                 `<tr><td style="color:#666;width:45%">${k}</td><td style="color:#ddd">${v}</td></tr>`

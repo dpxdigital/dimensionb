@@ -4,40 +4,28 @@ namespace App\Libraries;
 
 class FCMNotificationService
 {
-    private string $serverKey;
-    private string $fcmUrl = 'https://fcm.googleapis.com/fcm/send';
+    private string $projectId;
+    private static string $cachedToken  = '';
+    private static int    $tokenExpiry  = 0;
 
     public function __construct()
     {
-        $this->serverKey = env('FIREBASE_SERVER_KEY', '');
+        $this->projectId = env('FIREBASE_PROJECT_ID', '');
     }
 
-    /**
-     * Send a push notification to a single user (all their devices).
-     */
+    // ── Public send helpers ───────────────────────────────────────────────────
+
     public function sendToUser(int $userId, string $title, string $body, array $data = []): void
     {
         $tokens = $this->getTokensForUser($userId);
-        if (empty($tokens)) {
-            return;
-        }
-        $this->dispatch($tokens, $title, $body, $data);
+        if (! empty($tokens)) $this->dispatch($tokens, $title, $body, $data);
     }
 
-    /**
-     * Send a push notification to multiple users.
-     */
     public function sendToMultiple(array $userIds, string $title, string $body, array $data = []): void
     {
-        if (empty($userIds)) {
-            return;
-        }
+        if (empty($userIds)) return;
         $tokens = $this->getTokensForUsers($userIds);
-        if (empty($tokens)) {
-            return;
-        }
-        // FCM allows up to 1000 registration IDs per request
-        foreach (array_chunk($tokens, 1000) as $chunk) {
+        foreach (array_chunk($tokens, 500) as $chunk) {
             $this->dispatch($chunk, $title, $body, $data);
         }
     }
@@ -74,16 +62,15 @@ class FCMNotificationService
     public function notifySubmissionStatus(int $userId, int $submissionId, string $status): void
     {
         $isApproved = $status === 'approved';
-        $title = $isApproved ? 'Submission Approved!' : 'Submission Update';
-        $body  = $isApproved
-            ? 'Your submission has been approved and is now live.'
-            : 'Your submission needs review. Tap to see details.';
-
-        $this->sendToUser($userId, $title, $body, [
-            'type'          => "submission_$status",
-            'submission_id' => (string) $submissionId,
-            'deep_link'     => '/activity/submissions',
-        ]);
+        $this->sendToUser($userId,
+            $isApproved ? 'Submission Approved!' : 'Submission Update',
+            $isApproved ? 'Your submission has been approved and is now live.' : 'Your submission needs review.',
+            [
+                'type'          => "submission_$status",
+                'submission_id' => (string) $submissionId,
+                'deep_link'     => '/activity/submissions',
+            ]
+        );
     }
 
     public function notifyNewMessage(int $userId, int $conversationId, string $senderName): void
@@ -130,84 +117,155 @@ class FCMNotificationService
         ]);
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
+    // ── Private: OAuth2 access token (FCM v1 API) ─────────────────────────────
+
+    private function getAccessToken(): string
+    {
+        if (self::$cachedToken !== '' && time() < self::$tokenExpiry) {
+            return self::$cachedToken;
+        }
+
+        $raw = env('FIREBASE_SERVICE_ACCOUNT_JSON', '');
+        $sa  = $raw ? json_decode($raw, true) : null;
+
+        if (empty($sa['private_key']) || empty($sa['client_email'])) {
+            log_message('error', '[FCM] FIREBASE_SERVICE_ACCOUNT_JSON not configured or invalid.');
+            return '';
+        }
+
+        $now    = time();
+        $header = $this->b64u(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+        $claims = $this->b64u(json_encode([
+            'iss'   => $sa['client_email'],
+            'scope' => 'https://www.googleapis.com/auth/firebase.messaging',
+            'aud'   => 'https://oauth2.googleapis.com/token',
+            'iat'   => $now,
+            'exp'   => $now + 3600,
+        ]));
+
+        $input = "{$header}.{$claims}";
+        if (! openssl_sign($input, $sig, $sa['private_key'], OPENSSL_ALGO_SHA256)) {
+            log_message('error', '[FCM] Failed to sign JWT — check private key.');
+            return '';
+        }
+        $jwt = "{$input}." . $this->b64u($sig);
+
+        $ch = curl_init('https://oauth2.googleapis.com/token');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 10,
+            CURLOPT_POSTFIELDS     => http_build_query([
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion'  => $jwt,
+            ]),
+        ]);
+        $res  = json_decode(curl_exec($ch), true);
+        curl_close($ch);
+
+        $token = $res['access_token'] ?? '';
+        if ($token === '') {
+            log_message('error', '[FCM] Failed to get access token: ' . json_encode($res));
+            return '';
+        }
+
+        self::$cachedToken = $token;
+        self::$tokenExpiry = $now + 3500;
+        return $token;
+    }
+
+    // ── Private: dispatch messages ────────────────────────────────────────────
+
+    private function dispatch(array $tokens, string $title, string $body, array $data): void
+    {
+        if (empty($this->projectId) || empty($tokens)) return;
+
+        $accessToken = $this->getAccessToken();
+        if ($accessToken === '') return;
+
+        $url     = "https://fcm.googleapis.com/v1/projects/{$this->projectId}/messages:send";
+        $headers = [
+            'Content-Type: application/json',
+            "Authorization: Bearer {$accessToken}",
+        ];
+
+        // FCM v1 requires all data values to be strings
+        $strData    = array_map('strval', $data);
+        $channelId  = $this->channelId($data['type'] ?? '');
+
+        foreach ($tokens as $token) {
+            $payload = json_encode([
+                'message' => [
+                    'token'        => $token,
+                    'notification' => ['title' => $title, 'body' => $body],
+                    'data'         => $strData,
+                    'android'      => [
+                        'priority'     => 'high',
+                        'notification' => [
+                            'sound'      => 'default',
+                            'channel_id' => $channelId,
+                            'icon'       => 'ic_notification',
+                            'color'      => '#D94032',
+                        ],
+                    ],
+                    'apns' => [
+                        'headers' => ['apns-priority' => '10'],
+                        'payload' => ['aps' => ['sound' => 'default', 'badge' => 1]],
+                    ],
+                ],
+            ]);
+
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => $payload,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 5,
+                CURLOPT_HTTPHEADER     => $headers,
+            ]);
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            // Remove stale/unregistered tokens
+            if ($httpCode === 404) {
+                $errCode = json_decode($response, true)['error']['details'][0]['errorCode'] ?? '';
+                if (in_array($errCode, ['UNREGISTERED', 'INVALID_ARGUMENT'], true)) {
+                    db_connect()->table('fcm_tokens')->where('token', $token)->delete();
+                }
+            }
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private function channelId(string $type): string
+    {
+        $chat = ['new_message', 'new_group_message', 'connection_request', 'connection_accepted', 'added_to_group'];
+        $live = ['live_starting'];
+        if (in_array($type, $chat, true)) return 'dimensions_messages';
+        if (in_array($type, $live, true)) return 'dimensions_live';
+        return 'dimensions_default';
+    }
+
+    private function b64u(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
 
     private function getTokensForUser(int $userId): array
     {
-        $rows = db_connect()
-            ->table('fcm_tokens')
-            ->select('token')
-            ->where('user_id', $userId)
-            ->get()->getResultArray();
-
-        return array_column($rows, 'token');
+        return array_column(
+            db_connect()->table('fcm_tokens')->select('token')->where('user_id', $userId)->get()->getResultArray(),
+            'token'
+        );
     }
 
     private function getTokensForUsers(array $userIds): array
     {
-        $rows = db_connect()
-            ->table('fcm_tokens')
-            ->select('token')
-            ->whereIn('user_id', $userIds)
-            ->get()->getResultArray();
-
-        return array_column($rows, 'token');
-    }
-
-    private function dispatch(array $tokens, string $title, string $body, array $data): void
-    {
-        if (empty($this->serverKey) || empty($tokens)) {
-            return;
-        }
-
-        $payload = json_encode([
-            'registration_ids' => $tokens,
-            'notification' => [
-                'title' => $title,
-                'body'  => $body,
-                'sound' => 'default',
-            ],
-            'data' => $data,
-        ]);
-
-        $ch = curl_init($this->fcmUrl);
-        curl_setopt_array($ch, [
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 5,
-            CURLOPT_HTTPHEADER     => [
-                'Content-Type: application/json',
-                "Authorization: key={$this->serverKey}",
-            ],
-        ]);
-
-        $response = curl_exec($ch);
-        curl_close($ch);
-
-        // Clean up stale tokens (invalid_registration / not_registered)
-        if ($response !== false) {
-            $this->cleanupStaleTokens($tokens, $response);
-        }
-    }
-
-    private function cleanupStaleTokens(array $tokens, string $response): void
-    {
-        $decoded = json_decode($response, true);
-        if (! isset($decoded['results'])) {
-            return;
-        }
-
-        $stale = [];
-        foreach ($decoded['results'] as $i => $result) {
-            if (isset($result['error']) &&
-                in_array($result['error'], ['InvalidRegistration', 'NotRegistered'], true)) {
-                $stale[] = $tokens[$i];
-            }
-        }
-
-        if (! empty($stale)) {
-            db_connect()->table('fcm_tokens')->whereIn('token', $stale)->delete();
-        }
+        return array_column(
+            db_connect()->table('fcm_tokens')->select('token')->whereIn('user_id', $userIds)->get()->getResultArray(),
+            'token'
+        );
     }
 }

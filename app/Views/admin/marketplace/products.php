@@ -77,8 +77,9 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function toggleProduct(id, makeAvailable) {
-    fetch(`/manager/marketplace/products/${id}/toggle`, {
+    fetch(BASE + `/manager/marketplace/products/${id}/toggle`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' }
     })

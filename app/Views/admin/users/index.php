@@ -93,9 +93,10 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function toggleUser(id, active) {
     if (!confirm(active ? 'Unban this user?' : 'Ban this user?')) return;
-    fetch(`/manager/users/${id}/toggle-status`, {
+    fetch(BASE + `/manager/users/${id}/toggle-status`, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
         body: JSON.stringify({ _method: 'POST' })

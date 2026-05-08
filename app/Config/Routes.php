@@ -165,6 +165,7 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->get('chapters/(:num)',              'Chapters\ChaptersController::show/$1');
         $routes->post('chapters/(:num)/join',        'Chapters\ChaptersController::join/$1');
         $routes->get('chapters/(:num)/feed',         'Chapters\ChaptersController::feed/$1');
+        $routes->post('chapters/(:num)/cover',       'Chapters\ChaptersController::uploadCover/$1');
 
         // ── Chapter group chat (messages) ─────────────────────────────────────
         $routes->get('chapters/(:num)/messages',                    'Chapters\ChapterMessagesController::index/$1');

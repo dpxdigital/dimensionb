@@ -38,17 +38,20 @@ class NotificationsController extends BaseAdminController
 
         $deliveryCount = 0;
 
+        $data = ['type' => 'admin_broadcast'];
+        if ($deepLink !== '') $data['deep_link'] = $deepLink;
+
         switch ($type) {
             case 'all':
                 $userIds = array_column($db->table('users')->select('id')->where('is_active', 1)->get()->getResultArray(), 'id');
-                $fcm->sendToMultiple($userIds, $title, $body, ['deep_link' => $deepLink]);
+                $fcm->sendToMultiple($userIds, $title, $body, $data);
                 $deliveryCount = count($userIds);
                 break;
 
             case 'user':
                 $user = $db->table('users')->select('id')->where('email', $targetVal)->get()->getRowArray();
                 if ($user) {
-                    $fcm->sendToUser((int) $user['id'], $title, $body, ['deep_link' => $deepLink]);
+                    $fcm->sendToUser((int) $user['id'], $title, $body, $data);
                     $deliveryCount = 1;
                 }
                 break;
@@ -63,7 +66,7 @@ class NotificationsController extends BaseAdminController
                     'id'
                 );
                 if (! empty($userIds)) {
-                    $fcm->sendToMultiple($userIds, $title, $body, ['deep_link' => $deepLink]);
+                    $fcm->sendToMultiple($userIds, $title, $body, $data);
                     $deliveryCount = count($userIds);
                 }
                 break;

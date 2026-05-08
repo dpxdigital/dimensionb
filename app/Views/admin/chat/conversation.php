@@ -90,9 +90,10 @@
 
 <?= $this->section('scripts') ?>
 <script>
+const BASE = '<?= rtrim(site_url(), '/') ?>';
 function removeMember(convId, userId) {
     if (!confirm('Remove this member?')) return;
-    fetch(`/manager/chat/${convId}/member/${userId}/remove`, {
+    fetch(BASE + `/manager/chat/${convId}/member/${userId}/remove`, {
         method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }
     }).then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
 }
