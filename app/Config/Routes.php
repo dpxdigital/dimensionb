@@ -312,6 +312,16 @@ $routes->group('manager', ['filter' => 'adminauth'], static function (RouteColle
     $routes->get( 'marketplace/orders',                       'MarketplaceController::orders');
     $routes->post('marketplace/orders/(:num)/status',         'MarketplaceController::updateOrderStatus/$1');
 
+    // Chapters
+    $routes->get( 'chapters',                                 'ChaptersController::index');
+    $routes->get( 'chapters/create',                          'ChaptersController::create');
+    $routes->post('chapters',                                 'ChaptersController::store');
+    $routes->get( 'chapters/(:num)',                          'ChaptersController::show/$1');
+    $routes->post('chapters/(:num)/update',                   'ChaptersController::update/$1');
+    $routes->post('chapters/(:num)/cover',                    'ChaptersController::uploadCover/$1');
+    $routes->post('chapters/(:num)/toggle',                   'ChaptersController::toggleStatus/$1');
+    $routes->post('chapters/(:num)/delete',                   'ChaptersController::delete/$1');
+
     // Black Census submissions
     $routes->get( 'census',                                   'CensusController::index');
     $routes->get( 'census/export',                            'CensusController::export');

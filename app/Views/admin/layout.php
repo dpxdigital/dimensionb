@@ -117,6 +117,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="<?= site_url() ?>manager/chapters" class="nav-link <?= str_contains(current_url(), '/manager/chapters') ? 'active' : '' ?>">
+                        <i class="nav-icon fas fa-layer-group"></i><p>Chapters</p>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="<?= site_url() ?>manager/census" class="nav-link <?= str_contains(current_url(), '/manager/census') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-clipboard-list"></i><p>Black Census</p>
                         <?php
