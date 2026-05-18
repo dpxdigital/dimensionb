@@ -122,16 +122,17 @@ class ProfileTabsController extends BaseApiController
         return $this->success($data);
     }
 
-    // GET /v1/profile/chapters
+    // GET /v1/profile/chapters  (also aliased as /v1/profile/circles)
     public function chapters(): ResponseInterface
     {
         $userId = $this->authUserId();
         $db     = db_connect();
 
-        $rows = $db->table('chapter_members cm')
-            ->select('c.id, c.name, c.city, c.state, c.image_url, c.member_count')
-            ->join('chapters c', 'c.id = cm.chapter_id')
+        $rows = $db->table('circle_members cm')
+            ->select('c.id, c.name, c.location, c.logo_url, c.member_count')
+            ->join('circles c', 'c.id = cm.circle_id')
             ->where('cm.user_id', $userId)
+            ->where('cm.status', 'approved')
             ->orderBy('cm.joined_at', 'DESC')
             ->get()->getResultArray();
 
@@ -139,9 +140,8 @@ class ProfileTabsController extends BaseApiController
             return [
                 'id'           => (string) $row['id'],
                 'name'         => $row['name'],
-                'city'         => $row['city'] ?? null,
-                'state'        => $row['state'] ?? null,
-                'image_url'    => $row['image_url'] ?? null,
+                'city'         => $row['location'] ?? null,
+                'image_url'    => $row['logo_url'] ?? null,
                 'member_count' => (int) ($row['member_count'] ?? 0),
             ];
         }, $rows);
