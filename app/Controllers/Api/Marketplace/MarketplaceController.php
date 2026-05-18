@@ -28,20 +28,26 @@ class MarketplaceController extends BaseApiController
 
         $vendors = $vendorQuery->get()->getResultArray();
 
-        $featured = $db->table('vendors')
+        $featuredQuery = $db->table('vendors')
             ->where('is_active', 1)
             ->orderBy('rating', 'DESC')
-            ->limit(5)
-            ->get()->getResultArray();
+            ->limit(5);
 
-        $trending = $db->table('products p')
+        if ($category) $featuredQuery->where('category', $category);
+
+        $featured = $featuredQuery->get()->getResultArray();
+
+        $trendingQuery = $db->table('products p')
             ->select('p.*, v.name AS vendor_name, v.logo_url AS vendor_logo')
             ->join('vendors v', 'v.id = p.vendor_id')
             ->where('p.is_available', 1)
             ->where('v.is_active', 1)
             ->orderBy('p.id', 'DESC')
-            ->limit(10)
-            ->get()->getResultArray();
+            ->limit(10);
+
+        if ($category) $trendingQuery->where('v.category', $category);
+
+        $trending = $trendingQuery->get()->getResultArray();
 
         $categories = ['Food & Beverage', 'Fashion', 'Beauty', 'Tech', 'Home', 'Services', 'Art & Culture', 'Health & Wellness'];
 
