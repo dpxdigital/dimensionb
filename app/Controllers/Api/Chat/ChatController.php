@@ -180,10 +180,13 @@ class ChatController extends BaseApiController
         }
 
         // Type-specific validation
+        $replyToId = isset($input['reply_to_id']) ? (int) $input['reply_to_id'] : null;
+
         $insertData = [
             'conversation_id' => $id,
             'sender_id'       => $userId,
             'type'            => $type,
+            'reply_to_id'     => $replyToId ?: null,
             'created_at'      => date('Y-m-d H:i:s'),
             'updated_at'      => date('Y-m-d H:i:s'),
         ];
@@ -258,8 +261,10 @@ class ChatController extends BaseApiController
         $this->notifyOtherMembers($id, $userId, $type, $insertData['body'] ?? null);
 
         $msg = $db->table('messages m')
-            ->select('m.*, u.id AS sender_user_id, u.name AS sender_name, u.avatar_url AS sender_avatar')
+            ->select('m.*, u.id AS sender_user_id, u.name AS sender_name, u.avatar_url AS sender_avatar, rm.body AS reply_to_body, ru.name AS reply_to_sender_name')
             ->join('users u', 'u.id = m.sender_id', 'left')
+            ->join('messages rm', 'rm.id = m.reply_to_id', 'left')
+            ->join('users ru', 'ru.id = rm.sender_id', 'left')
             ->where('m.id', $msgId)
             ->get()->getRowArray();
 

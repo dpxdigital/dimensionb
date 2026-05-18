@@ -12,7 +12,7 @@ class MessageModel extends Model
     protected $allowedFields = [
         'conversation_id', 'sender_id', 'type', 'body',
         'file_url', 'file_name', 'file_size', 'file_mime',
-        'listing_id', 'is_deleted', 'deleted_for_all',
+        'listing_id', 'reply_to_id', 'is_deleted', 'deleted_for_all',
     ];
     protected $useTimestamps = true;
 
@@ -35,10 +35,14 @@ class MessageModel extends Model
             ->select("
                 m.id, m.conversation_id, m.sender_id, m.type, m.body,
                 m.file_url, m.file_name, m.file_size, m.listing_id,
-                m.is_deleted, m.deleted_for_all, m.created_at,
-                u.id AS sender_user_id, u.name AS sender_name, u.avatar_url AS sender_avatar
+                m.reply_to_id, m.is_deleted, m.deleted_for_all, m.created_at,
+                u.id AS sender_user_id, u.name AS sender_name, u.avatar_url AS sender_avatar,
+                rm.body AS reply_to_body,
+                ru.name AS reply_to_sender_name
             ", false)
             ->join('users u', 'u.id = m.sender_id', 'left')
+            ->join('messages rm', 'rm.id = m.reply_to_id', 'left')
+            ->join('users ru', 'ru.id = rm.sender_id', 'left')
             ->where('m.conversation_id', $conversationId);
 
         if ($cursor !== null) {
@@ -124,11 +128,14 @@ class MessageModel extends Model
             'file_url'        => $isDeleted ? null : ($row['file_url'] ?? null),
             'file_name'       => $isDeleted ? null : ($row['file_name'] ?? null),
             'file_size'       => isset($row['file_size']) ? (int) $row['file_size'] : null,
-            'listing_id'      => isset($row['listing_id']) ? (string) $row['listing_id'] : null,
-            'is_deleted'      => $isDeleted,
-            'deleted_for_all' => (bool) $row['deleted_for_all'],
-            'reactions'       => [],
-            'created_at'      =>        $row['created_at'],
+            'listing_id'           => isset($row['listing_id']) ? (string) $row['listing_id'] : null,
+            'reply_to_id'          => isset($row['reply_to_id']) ? (string) $row['reply_to_id'] : null,
+            'reply_to_body'        => $row['reply_to_body'] ?? null,
+            'reply_to_sender_name' => $row['reply_to_sender_name'] ?? null,
+            'is_deleted'           => $isDeleted,
+            'deleted_for_all'      => (bool) $row['deleted_for_all'],
+            'reactions'            => [],
+            'created_at'           => $row['created_at'],
         ];
     }
 }
