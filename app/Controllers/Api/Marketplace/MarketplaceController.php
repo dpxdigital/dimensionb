@@ -18,7 +18,7 @@ class MarketplaceController extends BaseApiController
         $q        = trim((string) ($this->request->getGet('q') ?? ''));
 
         $vendorQuery = $db->table('vendors v')
-            ->select('v.id, v.name, v.slug, v.description, v.category, v.logo_url, v.banner_url, v.rating, v.contact_email')
+            ->select('v.id, v.user_id, v.name, v.slug, v.description, v.category, v.logo_url, v.banner_url, v.rating, v.contact_email')
             ->where('v.is_active', 1)
             ->orderBy('v.rating', 'DESC')
             ->limit(20);
@@ -71,6 +71,7 @@ class MarketplaceController extends BaseApiController
     {
         return [
             'id'            => (string) $row['id'],
+            'user_id'       => isset($row['user_id']) ? (string) $row['user_id'] : null,
             'name'          => $row['name'],
             'slug'          => $row['slug'] ?? '',
             'description'   => $row['description'] ?? null,

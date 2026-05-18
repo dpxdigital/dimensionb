@@ -174,6 +174,7 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->get('profile/posts',    'Profile\ProfileTabsController::posts');
         $routes->get('profile/saved',    'Profile\ProfileTabsController::saved');
         $routes->get('profile/chapters', 'Profile\ProfileTabsController::chapters');
+        $routes->get('profile/circles',  'Profile\ProfileTabsController::chapters');
 
         // ── Submissions ───────────────────────────────────────────────────────
         $routes->post('submissions',     'Submissions\SubmissionsController::create');
