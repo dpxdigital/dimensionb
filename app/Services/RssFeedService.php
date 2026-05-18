@@ -83,6 +83,9 @@ class RssFeedService
                 }
             }
 
+            // Skip articles with no image — only store content we can display visually
+            if (empty($imageUrl)) { $skipped++; continue; }
+
             $articleModel->insert([
                 'feed_id'      => $feedId,
                 'guid'         => $guid,
