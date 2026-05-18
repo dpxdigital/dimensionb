@@ -3,6 +3,7 @@
 namespace App\Controllers\Admin;
 
 use App\Libraries\S3Uploader;
+use App\Services\ListingFeedService;
 
 class ListingsController extends BaseAdminController
 {
@@ -71,9 +72,17 @@ class ListingsController extends BaseAdminController
         $categories = $db->table('categories')->orderBy('sort_order')->orderBy('name')->get()->getResultArray();
         $lastPage   = (int) ceil($total / self::PER_PAGE);
 
+        $feeds    = $db->table('listing_rss_feeds lf')
+            ->select('lf.*, c.name AS category_name')
+            ->join('categories c', 'c.id = lf.category_id', 'left')
+            ->orderBy('lf.created_at', 'DESC')
+            ->get()->getResultArray();
+        $cronToken = env('LISTING_FEED_CRON_TOKEN', '');
+
         return $this->renderView('admin/listings/index', compact(
             'listings', 'total', 'page', 'lastPage', 'search',
-            'categories', 'category', 'trustLevel', 'status'
+            'categories', 'category', 'trustLevel', 'status',
+            'feeds', 'cronToken'
         ));
     }
 
@@ -163,6 +172,249 @@ class ListingsController extends BaseAdminController
         $this->audit('listing_created', 'listing', $id, trim($p['title']));
 
         return redirect()->to("/manager/listings/{$id}")->with('success', 'Listing created and published.');
+    }
+
+    // ── POST /manager/listings/import-rss ────────────────────────────────────
+
+    public function importRss()
+    {
+        $url        = trim($this->request->getPost('rss_url') ?? '');
+        $categoryId = (int) $this->request->getPost('category_id');
+        $trustLevel = $this->request->getPost('trust_level') ?? 'community_submitted';
+        $status     = $this->request->getPost('import_status') ?? 'pending';
+
+        if (! $url || ! filter_var($url, FILTER_VALIDATE_URL)) {
+            return redirect()->to('/manager/listings')->with('error', 'Invalid RSS URL.');
+        }
+        if (! $categoryId) {
+            return redirect()->to('/manager/listings')->with('error', 'Please select a category.');
+        }
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_MAXREDIRS      => 5,
+            CURLOPT_TIMEOUT        => 20,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT      => 'Dimensions-Bot/1.0 (+https://dimensions.app)',
+        ]);
+        $xml     = curl_exec($ch);
+        $curlErr = curl_error($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($xml === false || $curlErr || $httpCode < 200 || $httpCode >= 300) {
+            return redirect()->to('/manager/listings')
+                ->with('error', 'Could not fetch RSS (HTTP ' . $httpCode . '): ' . $curlErr);
+        }
+
+        // Strip BOM and leading whitespace before XML declaration
+        $xml = ltrim($xml, "\xEF\xBB\xBF \t\n\r");
+
+        libxml_use_internal_errors(true);
+        $sx = simplexml_load_string($xml, 'SimpleXMLElement', LIBXML_NOCDATA);
+        libxml_clear_errors();
+
+        if ($sx === false) {
+            return redirect()->to('/manager/listings')->with('error', 'Invalid RSS/XML format — not a valid feed.');
+        }
+
+        $db       = db_connect();
+        $now      = date('Y-m-d H:i:s');
+        $count    = 0;
+        $rootName = strtolower($sx->getName());
+        $isAtom   = ($rootName === 'feed');
+        $channel  = ! $isAtom ? ($sx->channel ?? null) : null;
+        $items    = $isAtom
+            ? ($sx->entry ?? [])
+            : ($channel !== null ? ($channel->item ?? []) : ($sx->item ?? []));
+        $isActive = ($status === 'approved') ? 1 : 0;
+        $label    = ucwords(str_replace('_', ' ', $trustLevel));
+
+        foreach ($items as $item) {
+            $title = mb_substr(trim((string) ($item->title ?? '')), 0, 255);
+            if ($title === '') continue;
+
+            if ($isAtom) {
+                $link = '';
+                foreach ($item->link as $l) {
+                    $rel = (string) ($l['rel'] ?? 'alternate');
+                    if ($rel === 'alternate' || $rel === '') { $link = (string) $l['href']; break; }
+                    if ($link === '') $link = (string) $l['href'];
+                }
+                $rawDesc = (string) ($item->summary ?? $item->content ?? '');
+            } else {
+                $link    = trim((string) ($item->link ?? ''));
+                $rawDesc = (string) ($item->description ?? '');
+            }
+
+            $desc = mb_substr(trim(strip_tags($rawDesc)), 0, 500);
+            if ($desc === '') $desc = $title; // description is NOT NULL
+
+            // Skip duplicate external URLs
+            if ($link !== '' && $db->table('listings')->where('external_url', $link)->countAllResults()) {
+                continue;
+            }
+
+            // Image extraction: media:thumbnail → enclosure → first <img>
+            $imageUrl = null;
+            $media    = $item->children('media', true);
+            if (! isset($media->thumbnail) && ! isset($media->content)) {
+                $media = $item->children('http://search.yahoo.com/mrss/');
+            }
+            if (isset($media->thumbnail)) {
+                $imageUrl = (string) $media->thumbnail['url'];
+            } elseif (isset($media->content)) {
+                $mType = (string) $media->content['type'];
+                if (! str_starts_with($mType, 'video/')) {
+                    $imageUrl = (string) $media->content['url'];
+                }
+            }
+            if ($imageUrl === null && isset($item->enclosure)) {
+                if (str_starts_with((string) $item->enclosure['type'], 'image/')) {
+                    $imageUrl = (string) $item->enclosure['url'];
+                }
+            }
+            if ($imageUrl === null) {
+                if (preg_match('/<img[^>]+src=["\']([^"\']+)["\'][^>]*/is', $rawDesc, $m)) {
+                    $imageUrl = $m[1];
+                }
+            }
+            if ($imageUrl !== null && ! filter_var($imageUrl, FILTER_VALIDATE_URL)) {
+                $imageUrl = null;
+            }
+
+            $db->table('listings')->insert([
+                'title'        => $title,
+                'description'  => $desc,
+                'category_id'  => $categoryId,
+                'org_name'     => '',
+                'location'     => '',
+                'date'         => null,
+                'deadline'     => null,
+                'action_type'  => 'external',
+                'external_url' => $link,
+                'trust_level'  => $trustLevel,
+                'trust_label'  => $label,
+                'cover_url'    => $imageUrl,
+                'status'       => $status,
+                'is_active'    => $isActive,
+                'submitted_by' => null,
+                'created_at'   => $now,
+                'updated_at'   => $now,
+            ]);
+            $count++;
+        }
+
+        $this->audit('listings_rss_import', 'system', 0, "Imported {$count} from {$url}");
+
+        return redirect()->to('/manager/listings')
+            ->with('success', "Imported {$count} listing(s) from RSS feed.");
+    }
+
+    // ── POST /manager/listings/feeds/store ───────────────────────────────────
+
+    public function storeFeed()
+    {
+        $name       = trim($this->request->getPost('name') ?? '');
+        $url        = trim($this->request->getPost('url')  ?? '');
+        $categoryId = (int) $this->request->getPost('category_id');
+        $trustLevel = $this->request->getPost('trust_level')   ?? 'community_submitted';
+        $status     = $this->request->getPost('import_status') ?? 'pending';
+
+        if ($name === '' || ! filter_var($url, FILTER_VALIDATE_URL) || ! $categoryId) {
+            return redirect()->to('/manager/listings')->with('error', 'Name, valid URL and category are required.');
+        }
+
+        db_connect()->table('listing_rss_feeds')->insert([
+            'name'          => mb_substr($name, 0, 200),
+            'url'           => $url,
+            'category_id'   => $categoryId,
+            'trust_level'   => $trustLevel,
+            'import_status' => $status,
+            'is_active'     => 1,
+            'created_at'    => date('Y-m-d H:i:s'),
+        ]);
+
+        $this->audit('listing_feed_added', 'system', 0, $name);
+        return redirect()->to('/manager/listings')->with('success', "Feed \"{$name}\" added.");
+    }
+
+    // ── POST /manager/listings/feeds/:id/delete ───────────────────────────────
+
+    public function deleteFeed(int $id)
+    {
+        $db   = db_connect();
+        $feed = $db->table('listing_rss_feeds')->where('id', $id)->get()->getRowArray();
+        if (! $feed) return redirect()->to('/manager/listings')->with('error', 'Feed not found.');
+
+        $db->table('listing_rss_feeds')->where('id', $id)->delete();
+        $this->audit('listing_feed_deleted', 'system', 0, $feed['name']);
+        return redirect()->to('/manager/listings')->with('success', "Feed \"{$feed['name']}\" deleted.");
+    }
+
+    // ── POST /manager/listings/feeds/:id/toggle ───────────────────────────────
+
+    public function toggleFeed(int $id)
+    {
+        $db   = db_connect();
+        $feed = $db->table('listing_rss_feeds')->where('id', $id)->get()->getRowArray();
+        if (! $feed) return $this->jsonResponse(['success' => false, 'error' => 'Not found'], 404);
+
+        $newVal = $feed['is_active'] ? 0 : 1;
+        $db->table('listing_rss_feeds')->where('id', $id)->update(['is_active' => $newVal]);
+        return $this->jsonResponse(['success' => true, 'is_active' => $newVal]);
+    }
+
+    // ── POST /manager/listings/feeds/:id/fetch ────────────────────────────────
+
+    public function fetchFeed(int $id)
+    {
+        $db   = db_connect();
+        $feed = $db->table('listing_rss_feeds')->where('id', $id)->get()->getRowArray();
+        if (! $feed) return redirect()->to('/manager/listings')->with('error', 'Feed not found.');
+
+        $result = (new ListingFeedService())->importFeed($feed);
+        $count  = (int) ($result['count'] ?? 0);
+        $now    = date('Y-m-d H:i:s');
+
+        $db->table('listing_rss_feeds')->where('id', $id)->update([
+            'last_fetched_at' => $now,
+            'item_count'      => ((int) $feed['item_count']) + $count,
+        ]);
+
+        $this->audit('listing_feed_fetched', 'system', $id, "Imported {$count} from {$feed['name']}");
+
+        if ($result['error']) {
+            return redirect()->to('/manager/listings')->with('error', "Fetch error: {$result['error']}");
+        }
+        return redirect()->to('/manager/listings')->with('success', "Fetched {$count} new listing(s) from \"{$feed['name']}\".");
+    }
+
+    // ── POST /manager/listings/feeds/fetch-all ────────────────────────────────
+
+    public function fetchAllFeeds()
+    {
+        $db      = db_connect();
+        $feeds   = $db->table('listing_rss_feeds')->where('is_active', 1)->get()->getResultArray();
+        $service = new ListingFeedService();
+        $total   = 0;
+        $now     = date('Y-m-d H:i:s');
+
+        foreach ($feeds as $feed) {
+            $result = $service->importFeed($feed);
+            $count  = (int) ($result['count'] ?? 0);
+            $total += $count;
+            $db->table('listing_rss_feeds')->where('id', (int) $feed['id'])->update([
+                'last_fetched_at' => $now,
+                'item_count'      => ((int) $feed['item_count']) + $count,
+            ]);
+        }
+
+        $this->audit('listing_feeds_fetch_all', 'system', 0, "Imported {$total} from " . count($feeds) . " feeds");
+        return redirect()->to('/manager/listings')
+            ->with('success', "Fetched all feeds — {$total} new listing(s) imported.");
     }
 
     // ── GET /manager/listings/:id ─────────────────────────────────────────────
@@ -325,10 +577,6 @@ class ListingsController extends BaseAdminController
 
     public function delete($id)
     {
-        if (! $this->isSuperAdmin()) {
-            return redirect()->to('/manager/listings')->with('error', 'Access denied. Only super admins can delete listings.');
-        }
-
         $listing = db_connect()->table('listings')->select('id, title')->where('id', (int) $id)->get()->getRowArray();
 
         if (! $listing) {
@@ -339,5 +587,32 @@ class ListingsController extends BaseAdminController
         $this->audit('listing_deleted', 'listing', (int) $id, $listing['title']);
 
         return redirect()->to('/manager/listings')->with('success', "Listing deleted.");
+    }
+
+    // ── POST /manager/listings/bulk-delete ────────────────────────────────────
+
+    public function bulkDelete()
+    {
+        $raw = trim($this->request->getPost('ids') ?? '');
+        if ($raw === '') {
+            return redirect()->to('/manager/listings')->with('error', 'No listings selected.');
+        }
+
+        $ids = array_filter(array_map('intval', explode(',', $raw)));
+        if (empty($ids)) {
+            return redirect()->to('/manager/listings')->with('error', 'Invalid selection.');
+        }
+
+        $db      = db_connect();
+        $deleted = 0;
+        foreach ($ids as $id) {
+            $listing = $db->table('listings')->select('id, title')->where('id', $id)->get()->getRowArray();
+            if (! $listing) continue;
+            $db->table('listings')->where('id', $id)->delete();
+            $this->audit('listing_deleted', 'listing', $id, $listing['title']);
+            $deleted++;
+        }
+
+        return redirect()->to('/manager/listings')->with('success', "{$deleted} listing(s) deleted.");
     }
 }

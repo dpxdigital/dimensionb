@@ -13,19 +13,49 @@ class ProfileTabsController extends BaseApiController
         $userId = $this->authUserId();
         $db     = db_connect();
 
-        $rows = $db->table('posts p')
-            ->select('p.id, p.body, p.media, p.created_at, u.name AS user_name, u.avatar_url')
-            ->join('users u', 'u.id = p.user_id')
-            ->where('p.user_id', $userId)
-            ->orderBy('p.created_at', 'DESC')
-            ->limit(50)
-            ->get()->getResultArray();
+        // Self-heal: ensure posts table has media columns
+        foreach ([
+            "ALTER TABLE `posts` ADD COLUMN `image_url` VARCHAR(500) DEFAULT NULL",
+            "ALTER TABLE `posts` ADD COLUMN `video_url` VARCHAR(500) DEFAULT NULL",
+            "ALTER TABLE `posts` ADD COLUMN `post_type` VARCHAR(20) NOT NULL DEFAULT 'text'",
+            "ALTER TABLE `posts` ADD COLUMN `content` TEXT DEFAULT NULL",
+            "ALTER TABLE `posts` ADD COLUMN `body` TEXT DEFAULT NULL",
+            "ALTER TABLE `posts` ADD COLUMN `media` TEXT DEFAULT NULL",
+        ] as $sql) { try { $db->query($sql); } catch (\Throwable $e) {} }
+
+        try {
+            $rows = $db->table('posts p')
+                ->select('p.id, p.body, p.content, p.media, p.image_url, p.video_url, p.post_type, p.created_at, u.name AS user_name, u.avatar_url')
+                ->join('users u', 'u.id = p.user_id')
+                ->where('p.user_id', $userId)
+                ->where('p.is_deleted', 0)
+                ->orderBy('p.created_at', 'DESC')
+                ->limit(50)
+                ->get()->getResultArray();
+        } catch (\Throwable $e) {
+            $rows = [];
+        }
 
         $data = array_map(function ($row) {
+            // Build media array: prefer JSON media column, fall back to image_url/video_url
+            $media = [];
+            if (!empty($row['media'])) {
+                $decoded = json_decode($row['media'], true);
+                if (is_array($decoded) && count($decoded) > 0) {
+                    $media = $decoded;
+                }
+            }
+            if (empty($media)) {
+                if (!empty($row['video_url'])) {
+                    $media = [['type' => 'video', 'url' => $row['video_url']]];
+                } elseif (!empty($row['image_url'])) {
+                    $media = [['type' => 'image', 'url' => $row['image_url']]];
+                }
+            }
             return [
                 'id'         => (string) $row['id'],
-                'body'       => $row['body'],
-                'media'      => $row['media'] ? json_decode($row['media'], true) : [],
+                'body'       => $row['content'] ?? $row['body'] ?? null,
+                'media'      => $media,
                 'user_name'  => $row['user_name'],
                 'avatar_url' => $row['avatar_url'],
                 'created_at' => $row['created_at'],

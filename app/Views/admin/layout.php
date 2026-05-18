@@ -146,6 +146,11 @@
                     </a>
                 </li>
                 <li class="nav-item">
+                    <a href="<?= site_url() ?>manager/rss" class="nav-link <?= str_contains(current_url(), '/manager/rss') ? 'active' : '' ?>">
+                        <i class="nav-icon fas fa-rss"></i><p>RSS Feeds</p>
+                    </a>
+                </li>
+                <li class="nav-item">
                     <a href="<?= site_url() ?>manager/app-content" class="nav-link <?= str_contains(current_url(), '/manager/app-content') ? 'active' : '' ?>">
                         <i class="nav-icon fas fa-file-alt"></i><p>App Content</p>
                     </a>

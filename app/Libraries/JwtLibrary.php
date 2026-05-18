@@ -14,7 +14,11 @@ class JwtLibrary
 
     public function __construct()
     {
-        $this->secret        = env('JWT_SECRET', 'change-me');
+        $secret = env('JWT_SECRET', '');
+        if ($secret === '') {
+            throw new \RuntimeException('JWT_SECRET is not configured. Set a strong random value in .env.');
+        }
+        $this->secret        = $secret;
         $this->accessExpiry  = (int) env('JWT_ACCESS_EXPIRY', 900);
         $this->refreshExpiry = (int) env('JWT_REFRESH_EXPIRY', 2592000);
     }

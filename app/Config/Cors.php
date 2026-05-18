@@ -34,7 +34,9 @@ class Cors extends BaseConfig
          *   - ['http://localhost:8080']
          *   - ['https://www.example.com']
          */
-        'allowedOrigins' => ['*'],
+        // Mobile apps (iOS/Android) don't send Origin headers, so CORS only matters
+        // for browser-based callers (admin panel, web app). Restrict accordingly.
+        'allowedOrigins' => ['https://dimensions.global'],
 
         /**
          * Origin regex patterns for the `Access-Control-Allow-Origin` header.

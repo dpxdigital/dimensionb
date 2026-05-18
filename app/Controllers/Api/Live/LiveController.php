@@ -19,7 +19,41 @@ class LiveController extends BaseApiController
 
     public function index(): ResponseInterface
     {
-        $rows = $this->sessions->getActiveSessions();
+        // Purge ended sessions, abandoned active sessions, and overdue scheduled sessions
+        try {
+            $db = db_connect();
+            $db->table('live_sessions')->where('status', 'ended')->delete();
+            $db->query("DELETE FROM live_sessions WHERE status = 'active' AND (started_at IS NULL OR started_at < DATE_SUB(NOW(), INTERVAL 8 HOUR))");
+            $db->query("DELETE FROM live_sessions WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at < DATE_SUB(NOW(), INTERVAL 2 HOUR)");
+        } catch (\Throwable $e) {}
+
+        $status    = $this->request->getGet('status') ?? 'active';
+        $mySessions = (int) ($this->request->getGet('my_sessions') ?? 0);
+
+        if ($status === 'scheduled' && $mySessions) {
+            $userId = $this->authUserId();
+            $rows = $this->sessions
+                ->where('status', 'scheduled')
+                ->where('host_id', $userId)
+                ->orderBy('created_at', 'DESC')
+                ->findAll(50);
+            return $this->success(array_map(fn($r) => LiveSessionModel::format($r), $rows));
+        }
+
+        $circleId   = (int) ($this->request->getGet('circle_id')   ?? 0) ?: null;
+        $movementId = (int) ($this->request->getGet('movement_id') ?? 0) ?: null;
+
+        if ($circleId !== null) {
+            $rows = $this->sessions->getSessionsForCircle($circleId);
+        } elseif ($movementId !== null) {
+            $rows = $this->sessions->getSessionsForMovement($movementId);
+        } elseif ($status === 'ended') {
+            $rows = $this->sessions->getEndedPublicSessions(null);
+        } elseif ($status === 'scheduled') {
+            $rows = $this->sessions->getScheduledPublicSessions(null);
+        } else {
+            $rows = $this->sessions->getActiveSessions();
+        }
         return $this->success(array_map(fn($r) => LiveSessionModel::format($r), $rows));
     }
 
@@ -30,6 +64,8 @@ class LiveController extends BaseApiController
         if (! $this->checkLiveRateLimit()) {
             return $this->error('Rate limit: max 5 live streams per minute.', 429);
         }
+
+        $this->ensureLiveTables();
 
         $userId = $this->authUserId();
         $input  = $this->inputJson();
@@ -42,8 +78,31 @@ class LiveController extends BaseApiController
             return $this->validationError($this->validator->getErrors());
         }
 
+        $visibility = $input['visibility'] ?? 'public';
+        if (!in_array($visibility, ['public', 'circle_only', 'movement_followers'])) {
+            $visibility = 'public';
+        }
+
+        // Validate circle membership when circle_only
+        $circleId = !empty($input['circle_id']) ? (int) $input['circle_id'] : null;
+        if ($visibility === 'circle_only' && $circleId) {
+            $db     = db_connect();
+            $member = $db->table('circle_members')
+                ->where('circle_id', $circleId)->where('user_id', $userId)->where('status', 'approved')
+                ->get()->getRowArray();
+            if (!$member) {
+                return $this->error('You must be an approved member to go live in this circle', 403);
+            }
+        }
+
         $db   = db_connect();
         $user = $db->table('users')->where('id', $userId)->get()->getRowArray();
+
+        $validTrustLevels = ['institution_verified','curator_reviewed','community_submitted','approved_live_host','needs_reconfirmation'];
+        $hostTrustLevel   = $user['trust_level'] ?? 'community_submitted';
+        if (!in_array($hostTrustLevel, $validTrustLevels, true)) {
+            $hostTrustLevel = 'community_submitted';
+        }
 
         // Unique room name (reusing agora_channel column)
         $roomName = 'dim_' . bin2hex(random_bytes(8));
@@ -52,15 +111,20 @@ class LiveController extends BaseApiController
         $token = $this->generateLiveKitToken($roomName, 'host_' . $userId, true);
 
         $sessionId = $this->sessions->insert([
-            'host_id'       => $userId,
-            'title'         => trim($input['title']),
-            'category'      => trim($input['category']),
+            'host_id'           => $userId,
+            'title'             => trim($input['title']),
+            'category'          => trim($input['category']),
+            'description'       => $input['description'] ?? null,
             'linked_listing_id' => $input['linked_listing_id'] ?? null,
-            'agora_channel' => $roomName,
-            'agora_token'   => $token,
-            'viewer_count'  => 0,
-            'status'        => 'active',
-            'started_at'    => date('Y-m-d H:i:s'),
+            'circle_id'         => $circleId,
+            'movement_id'       => !empty($input['movement_id'])  ? (int) $input['movement_id']  : null,
+            'action_id'         => !empty($input['action_id'])    ? (int) $input['action_id']    : null,
+            'visibility'        => $visibility,
+            'agora_channel'     => $roomName,
+            'agora_token'       => $token,
+            'viewer_count'      => 0,
+            'status'            => 'active',
+            'started_at'        => date('Y-m-d H:i:s'),
         ]);
 
         $this->notifyFollowers($userId, (string) $sessionId, trim($input['title']));
@@ -68,12 +132,17 @@ class LiveController extends BaseApiController
         return $this->success([
             'id'               => (string) $sessionId,
             'host_id'          => (string) $userId,
-            'host_name'        => $user['name']        ?? '',
-            'host_avatar_url'  => $user['avatar_url']  ?? null,
-            'host_trust_level' => $user['trust_level'] ?? 'community_submitted',
+            'host_name'        => $user['name']       ?? '',
+            'host_avatar_url'  => $user['avatar_url'] ?? null,
+            'host_trust_level' => $hostTrustLevel,
             'title'            => trim($input['title']),
             'category'         => trim($input['category']),
+            'description'      => $input['description'] ?? null,
             'linked_listing_id' => $input['linked_listing_id'] ?? null,
+            'circle_id'        => $circleId ? (string) $circleId : null,
+            'movement_id'      => !empty($input['movement_id']) ? (string) $input['movement_id'] : null,
+            'action_id'        => !empty($input['action_id'])   ? (string) $input['action_id']  : null,
+            'visibility'       => $visibility,
             'room_name'        => $roomName,
             'token'            => $token,
             'server_url'       => 'wss://dim-z07mwg4s.livekit.cloud',
@@ -83,16 +152,144 @@ class LiveController extends BaseApiController
         ], 'Live session started', 201);
     }
 
+    // ── POST /v1/live/schedule ────────────────────────────────────────────────
+
+    public function schedule(): ResponseInterface
+    {
+        $this->ensureLiveTables();
+
+        $userId = $this->authUserId();
+        $input  = $this->inputJson();
+
+        $rules = [
+            'title'        => 'required|max_length[255]',
+            'category'     => 'required|max_length[100]',
+            'scheduled_at' => 'required',
+        ];
+        if (! $this->validateData($input, $rules)) {
+            return $this->validationError($this->validator->getErrors());
+        }
+
+        $scheduledAt = strtotime($input['scheduled_at']);
+        if ($scheduledAt === false || $scheduledAt <= time()) {
+            return $this->validationError(['scheduled_at' => 'scheduled_at must be a future date/time']);
+        }
+
+        $visibility = $input['visibility'] ?? 'public';
+        if (!in_array($visibility, ['public', 'circle_only', 'movement_followers'])) {
+            $visibility = 'public';
+        }
+
+        $db = db_connect();
+
+        // Prevent duplicate: same user already has a scheduled session with this exact title
+        $duplicate = $db->table('live_sessions')
+            ->where('host_id', $userId)
+            ->where('status', 'scheduled')
+            ->where('LOWER(title)', strtolower(trim($input['title'])))
+            ->countAllResults();
+        if ($duplicate > 0) {
+            return $this->validationError(['title' => 'You already have a scheduled session with this title.']);
+        }
+
+        $sessionId = $this->sessions->insert([
+            'host_id'           => $userId,
+            'title'             => trim($input['title']),
+            'category'          => trim($input['category']),
+            'description'       => $input['description'] ?? null,
+            'linked_listing_id' => $input['linked_listing_id'] ?? null,
+            'circle_id'         => !empty($input['circle_id'])    ? (int) $input['circle_id']    : null,
+            'movement_id'       => !empty($input['movement_id'])  ? (int) $input['movement_id']  : null,
+            'action_id'         => !empty($input['action_id'])    ? (int) $input['action_id']    : null,
+            'visibility'        => $visibility,
+            'agora_channel'     => '',
+            'agora_token'       => '',
+            'viewer_count'      => 0,
+            'status'            => 'scheduled',
+            'scheduled_at'      => date('Y-m-d H:i:s', $scheduledAt),
+        ]);
+
+        $session = $this->sessions->getWithHost((int) $sessionId);
+        return $this->success(LiveSessionModel::format($session), 'Live session scheduled', 201);
+    }
+
+    // ── POST /v1/live/:id/start ───────────────────────────────────────────────
+
+    public function startScheduled($id = null): ResponseInterface
+    {
+        $userId = $this->authUserId();
+        $db     = db_connect();
+
+        $session = $this->sessions->find((int) $id);
+        if (! $session) {
+            return $this->error('Live session not found.', 404);
+        }
+        if ((int) $session['host_id'] !== (int) $userId) {
+            return $this->error('Only the host can start this session.', 403);
+        }
+        if ($session['status'] !== 'scheduled') {
+            return $this->error('Session is not in a scheduled state.', 422);
+        }
+
+        $user     = $db->table('users')->where('id', $userId)->get()->getRowArray();
+        $roomName = 'dim_' . bin2hex(random_bytes(8));
+        $token    = $this->generateLiveKitToken($roomName, 'host_' . $userId, true);
+
+        $validTrustLevels = ['institution_verified','curator_reviewed','community_submitted','approved_live_host','needs_reconfirmation'];
+        $hostTrustLevel   = $user['trust_level'] ?? 'community_submitted';
+        if (!in_array($hostTrustLevel, $validTrustLevels, true)) {
+            $hostTrustLevel = 'community_submitted';
+        }
+
+        $this->sessions->update((int) $id, [
+            'agora_channel' => $roomName,
+            'agora_token'   => $token,
+            'status'        => 'active',
+            'started_at'    => date('Y-m-d H:i:s'),
+        ]);
+
+        $this->notifyFollowers($userId, (string) $id, $session['title']);
+        $this->notifyReminders((int) $id, $session['title']);
+
+        return $this->success([
+            'id'                => (string) $id,
+            'host_id'           => (string) $userId,
+            'host_name'         => $user['name']       ?? '',
+            'host_avatar_url'   => $user['avatar_url'] ?? null,
+            'host_trust_level'  => $hostTrustLevel,
+            'title'             => $session['title'],
+            'category'          => $session['category'],
+            'description'       => $session['description'] ?? null,
+            'linked_listing_id' => $session['linked_listing_id'] ?? null,
+            'circle_id'         => $session['circle_id'] ?? null,
+            'movement_id'       => $session['movement_id'] ?? null,
+            'action_id'         => $session['action_id'] ?? null,
+            'visibility'        => $session['visibility'],
+            'room_name'         => $roomName,
+            'token'             => $token,
+            'server_url'        => 'wss://dim-z07mwg4s.livekit.cloud',
+            'viewer_count'      => 0,
+            'status'            => 'active',
+            'started_at'        => date('Y-m-d H:i:s'),
+        ], 'Live session started');
+    }
+
     // ── GET /v1/live/:id ──────────────────────────────────────────────────────
 
     public function show($id = null): ResponseInterface
     {
+        $userId  = $this->authUserId();
         $session = $this->sessions->getWithHost((int) $id);
         if ($session === null) {
             return $this->error('Live session not found.', 404);
         }
 
-        return $this->success(LiveSessionModel::format($session));
+        // Return the stored host token only to the host (prevents token leakage to viewers)
+        $token = ((int) $session['host_id'] === $userId)
+            ? ($session['agora_token'] ?? null)
+            : null;
+
+        return $this->success(LiveSessionModel::format($session, $token));
     }
 
     // ── PUT /v1/live/:id ──────────────────────────────────────────────────────
@@ -148,12 +345,7 @@ class LiveController extends BaseApiController
             return $this->error('Session already ended.', 409);
         }
 
-        $input = $this->inputJson();
-        $this->sessions->update((int) $id, [
-            'status'     => 'ended',
-            'ended_at'   => date('Y-m-d H:i:s'),
-            'replay_url' => $input['replay_url'] ?? null,
-        ]);
+        $this->sessions->delete((int) $id);
 
         return $this->success(null, 'Live session ended');
     }
@@ -162,6 +354,7 @@ class LiveController extends BaseApiController
 
     public function join($id = null): ResponseInterface
     {
+        $this->ensureLiveTables();
         $userId  = $this->authUserId();
         $session = $this->sessions->getWithHost((int) $id);
 
@@ -172,8 +365,31 @@ class LiveController extends BaseApiController
             return $this->error('This live session has ended.', 410);
         }
 
-        // Generate viewer LiveKit token (canPublish = false)
-        $token = $this->generateLiveKitToken($session['agora_channel'], 'viewer_' . $userId, false);
+        // Enforce visibility rules
+        $visibility = $session['visibility'] ?? 'public';
+        if ($visibility === 'circle_only' && !empty($session['circle_id'])) {
+            $db     = db_connect();
+            $member = $db->table('circle_members')
+                ->where('circle_id', $session['circle_id'])
+                ->where('user_id', $userId)
+                ->where('status', 'approved')
+                ->get()->getRowArray();
+            if (!$member) {
+                return $this->error('This live session is for circle members only', 403);
+            }
+        } elseif ($visibility === 'movement_followers' && !empty($session['movement_id'])) {
+            $db          = db_connect();
+            $isFollowing = $db->table('movement_followers')
+                ->where('movement_id', $session['movement_id'])
+                ->where('user_id', $userId)
+                ->countAllResults();
+            if (!$isFollowing) {
+                return $this->error('This live session is for movement followers only', 403);
+            }
+        }
+
+        // Generate participant LiveKit token (canPublish = true — everyone can share camera/mic)
+        $token = $this->generateLiveKitToken($session['agora_channel'], 'viewer_' . $userId, true);
 
         // Increment viewer count
         db_connect()->table('live_sessions')
@@ -189,7 +405,12 @@ class LiveController extends BaseApiController
             'host_trust_level' => $session['host_trust_level'] ?? 'community_submitted',
             'title'            => $session['title'],
             'category'         => $session['category'],
+            'description'      => $session['description'] ?? null,
             'linked_listing_id' => $session['linked_listing_id'] ? (string) $session['linked_listing_id'] : null,
+            'circle_id'        => $session['circle_id']   ? (int) $session['circle_id']   : null,
+            'movement_id'      => $session['movement_id'] ? (int) $session['movement_id'] : null,
+            'action_id'        => $session['action_id']   ? (int) $session['action_id']   : null,
+            'visibility'       => $session['visibility'] ?? 'public',
             'room_name'        => $session['agora_channel'],
             'token'            => $token,
             'server_url'       => 'wss://dim-z07mwg4s.livekit.cloud',
@@ -293,6 +514,72 @@ class LiveController extends BaseApiController
             ->delete();
 
         return $this->success(null, 'Co-host removed');
+    }
+
+    // ── POST /v1/live/:id/kick-participant ────────────────────────────────────
+
+    public function kickParticipant($id = null): ResponseInterface
+    {
+        $userId  = $this->authUserId();
+        $session = $this->sessions->find((int) $id);
+
+        if ($session === null) {
+            return $this->error('Live session not found.', 404);
+        }
+
+        // Only host or co-host can kick
+        $isHost    = (int) $session['host_id'] === $userId;
+        $isCohost  = false;
+        if (! $isHost) {
+            try {
+                $isCohost = db_connect()->table('live_cohosts')
+                    ->where('session_id', (int) $id)
+                    ->where('user_id', $userId)
+                    ->countAllResults() > 0;
+            } catch (\Throwable $e) {}
+        }
+        if (! $isHost && ! $isCohost) {
+            return $this->error('Only the host or co-hosts can remove participants.', 403);
+        }
+
+        $input    = $this->inputJson();
+        $identity = trim($input['identity'] ?? '');
+        if ($identity === '') {
+            return $this->error('identity is required.', 422);
+        }
+
+        // Call LiveKit server API to remove the participant
+        $apiKey    = 'APIRV4kSEhDLFHV';
+        $apiSecret = 'QP3IfYyWvPjfAn7IYdeyHwAzBYOyGs2U6VL0dgZlwfvC';
+        $serverUrl = 'https://dim-z07mwg4s.livekit.cloud';
+        $roomName  = $session['agora_channel'];
+
+        $now   = time();
+        $adminToken = $this->generateLiveKitToken($roomName, 'admin_' . $userId, true);
+
+        $body = json_encode(['room' => $roomName, 'identity' => $identity]);
+
+        $ch = curl_init($serverUrl . '/twirp/livekit.RoomService/RemoveParticipant');
+        curl_setopt_array($ch, [
+            CURLOPT_POST           => true,
+            CURLOPT_POSTFIELDS     => $body,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 5,
+            CURLOPT_HTTPHEADER     => [
+                'Content-Type: application/json',
+                'Authorization: Bearer ' . $adminToken,
+            ],
+        ]);
+        $resp = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($httpCode < 200 || $httpCode >= 300) {
+            log_message('error', "[kick] LiveKit API error {$httpCode}: {$resp}");
+            return $this->error('Could not remove participant.', 500);
+        }
+
+        return $this->success(null, 'Participant removed');
     }
 
     // ── GET /v1/live/:id/comments ─────────────────────────────────────────────
@@ -410,6 +697,55 @@ class LiveController extends BaseApiController
         return $this->success(null, 'Report submitted');
     }
 
+    // ── POST /v1/live/:id/remind ──────────────────────────────────────────────
+
+    public function toggleRemind($id = null): ResponseInterface
+    {
+        $userId = $this->authUserId();
+        $db     = db_connect();
+
+        try {
+            $db->query("
+                CREATE TABLE IF NOT EXISTS `live_reminders` (
+                    `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `session_id` BIGINT UNSIGNED NOT NULL,
+                    `user_id`    INT UNSIGNED NOT NULL,
+                    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    UNIQUE KEY `uq_reminder` (`session_id`, `user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        } catch (\Throwable $e) {}
+
+        $session = $this->sessions->find((int) $id);
+        if (! $session) {
+            return $this->error('Live session not found.', 404);
+        }
+        if ($session['status'] !== 'scheduled') {
+            return $this->error('Reminders can only be set for scheduled sessions.', 422);
+        }
+
+        $exists = $db->table('live_reminders')
+            ->where('session_id', (int) $id)
+            ->where('user_id', $userId)
+            ->countAllResults();
+
+        if ($exists) {
+            $db->table('live_reminders')
+                ->where('session_id', (int) $id)
+                ->where('user_id', $userId)
+                ->delete();
+            return $this->success(['reminded' => false]);
+        }
+
+        $db->table('live_reminders')->insert([
+            'session_id' => (int) $id,
+            'user_id'    => $userId,
+            'created_at' => date('Y-m-d H:i:s'),
+        ]);
+        return $this->success(['reminded' => true]);
+    }
+
     // ── GET /v1/live/:id/replay ───────────────────────────────────────────────
 
     public function replay($id = null): ResponseInterface
@@ -433,6 +769,91 @@ class LiveController extends BaseApiController
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
+
+    private function ensureLiveTables(): void
+    {
+        $db = db_connect();
+
+        // Create live_sessions table if missing
+        try {
+            $db->query("
+                CREATE TABLE IF NOT EXISTS `live_sessions` (
+                    `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `host_id`           INT UNSIGNED    NOT NULL,
+                    `title`             VARCHAR(255)    NOT NULL,
+                    `category`          VARCHAR(100)    NOT NULL,
+                    `description`       TEXT            DEFAULT NULL,
+                    `linked_listing_id` BIGINT UNSIGNED DEFAULT NULL,
+                    `circle_id`         BIGINT UNSIGNED DEFAULT NULL,
+                    `movement_id`       BIGINT UNSIGNED DEFAULT NULL,
+                    `action_id`         BIGINT UNSIGNED DEFAULT NULL,
+                    `visibility`        VARCHAR(40)     NOT NULL DEFAULT 'public',
+                    `agora_channel`     VARCHAR(120)    NOT NULL DEFAULT '',
+                    `agora_token`       TEXT            DEFAULT NULL,
+                    `viewer_count`      INT UNSIGNED    NOT NULL DEFAULT 0,
+                    `status`            ENUM('pending','active','ended','scheduled') NOT NULL DEFAULT 'pending',
+                    `scheduled_at`      DATETIME        DEFAULT NULL,
+                    `started_at`        DATETIME        DEFAULT NULL,
+                    `ended_at`          DATETIME        DEFAULT NULL,
+                    `replay_url`        VARCHAR(500)    DEFAULT NULL,
+                    `created_at`        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    `updated_at`        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    KEY `idx_ls_host`   (`host_id`),
+                    KEY `idx_ls_status` (`status`, `viewer_count`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            ");
+        } catch (\Throwable $e) {}
+
+        // Self-heal missing columns
+        $alterCols = [
+            "ALTER TABLE `live_sessions` ADD COLUMN `description`       TEXT            DEFAULT NULL",
+            "ALTER TABLE `live_sessions` ADD COLUMN `linked_listing_id` BIGINT UNSIGNED DEFAULT NULL",
+            "ALTER TABLE `live_sessions` ADD COLUMN `circle_id`         BIGINT UNSIGNED DEFAULT NULL",
+            "ALTER TABLE `live_sessions` ADD COLUMN `movement_id`       BIGINT UNSIGNED DEFAULT NULL",
+            "ALTER TABLE `live_sessions` ADD COLUMN `action_id`         BIGINT UNSIGNED DEFAULT NULL",
+            "ALTER TABLE `live_sessions` ADD COLUMN `visibility`        VARCHAR(40)     NOT NULL DEFAULT 'public'",
+            "ALTER TABLE `live_sessions` ADD COLUMN `scheduled_at`      DATETIME        DEFAULT NULL",
+            "ALTER TABLE `live_sessions` ADD COLUMN `ended_at`          DATETIME        DEFAULT NULL",
+            "ALTER TABLE `live_sessions` ADD COLUMN `replay_url`        VARCHAR(500)    DEFAULT NULL",
+            "ALTER TABLE `live_sessions` MODIFY COLUMN `status` ENUM('pending','active','ended','scheduled') NOT NULL DEFAULT 'pending'",
+            "ALTER TABLE `live_sessions` MODIFY COLUMN `status` VARCHAR(20) NOT NULL DEFAULT 'pending'",
+        ];
+        foreach ($alterCols as $sql) {
+            try { $db->query($sql); } catch (\Throwable $e) {}
+        }
+
+        // live_comments table
+        try {
+            $db->query("
+                CREATE TABLE IF NOT EXISTS `live_comments` (
+                    `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `session_id` BIGINT UNSIGNED NOT NULL,
+                    `user_id`    INT UNSIGNED    NOT NULL,
+                    `body`       VARCHAR(200)    NOT NULL,
+                    `is_pinned`  TINYINT(1)      NOT NULL DEFAULT 0,
+                    `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`),
+                    KEY `idx_lc_session` (`session_id`, `created_at`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        } catch (\Throwable $e) {}
+        try { $db->query("ALTER TABLE `live_comments` ADD COLUMN `is_pinned` TINYINT(1) NOT NULL DEFAULT 0"); } catch (\Throwable $e) {}
+
+        // live_reactions table
+        try {
+            $db->query("
+                CREATE TABLE IF NOT EXISTS `live_reactions` (
+                    `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+                    `session_id` BIGINT UNSIGNED NOT NULL,
+                    `user_id`    INT UNSIGNED    NOT NULL,
+                    `emoji`      VARCHAR(10)     NOT NULL,
+                    `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (`id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            ");
+        } catch (\Throwable $e) {}
+    }
 
     private function generateLiveKitToken(string $roomName, string $identity, bool $canPublish): string
     {
@@ -579,6 +1000,56 @@ class LiveController extends BaseApiController
             'status'           => $session['status'],
             'started_at'       => $session['started_at'],
         ]);
+    }
+
+    private function notifyReminders(int $sessionId, string $title): void
+    {
+        $db = db_connect();
+        try {
+            $reminders = $db->table('live_reminders lr')
+                ->select('ft.token')
+                ->join('fcm_tokens ft', 'ft.user_id = lr.user_id')
+                ->join('(SELECT user_id, MAX(updated_at) AS max_ua FROM fcm_tokens GROUP BY user_id) latest',
+                       'latest.user_id = ft.user_id AND latest.max_ua = ft.updated_at')
+                ->where('lr.session_id', $sessionId)
+                ->get()->getResultArray();
+
+            if (empty($reminders)) return;
+
+            $tokens     = array_column($reminders, 'token');
+            $serverKey  = env('FIREBASE_SERVER_KEY', '');
+            if (empty($serverKey)) return;
+
+            foreach (array_chunk($tokens, 500) as $chunk) {
+                $payload = json_encode([
+                    'registration_ids' => $chunk,
+                    'notification' => [
+                        'title' => 'Live session starting now 🔴',
+                        'body'  => $title,
+                    ],
+                    'data' => [
+                        'type'       => 'live_starting',
+                        'session_id' => (string) $sessionId,
+                    ],
+                ]);
+                $ch = curl_init('https://fcm.googleapis.com/fcm/send');
+                curl_setopt_array($ch, [
+                    CURLOPT_POST           => true,
+                    CURLOPT_POSTFIELDS     => $payload,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 5,
+                    CURLOPT_HTTPHEADER     => [
+                        'Content-Type: application/json',
+                        "Authorization: key={$serverKey}",
+                    ],
+                ]);
+                curl_exec($ch);
+                curl_close($ch);
+            }
+
+            // Clean up reminders for this session
+            $db->table('live_reminders')->where('session_id', $sessionId)->delete();
+        } catch (\Throwable $e) {}
     }
 
     private function notifyCohost(int $userId, array $session): void

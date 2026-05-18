@@ -44,7 +44,13 @@ class ConversationModel extends Model
                 last_msg.is_deleted AS last_msg_is_deleted,
                 last_sender.id        AS last_sender_id,
                 last_sender.name      AS last_sender_name,
-                last_sender.avatar_url AS last_sender_avatar
+                last_sender.avatar_url AS last_sender_avatar,
+                (SELECT u_other.name FROM conversation_members cm_other
+                 INNER JOIN users u_other ON u_other.id = cm_other.user_id
+                 WHERE cm_other.conversation_id = c.id AND cm_other.user_id != {$userId} LIMIT 1) AS other_user_name,
+                (SELECT u_other2.avatar_url FROM conversation_members cm_other2
+                 INNER JOIN users u_other2 ON u_other2.id = cm_other2.user_id
+                 WHERE cm_other2.conversation_id = c.id AND cm_other2.user_id != {$userId} LIMIT 1) AS other_user_avatar
             ", false)
             ->join('conversation_members cm', "cm.conversation_id = c.id AND cm.user_id = {$userId}", 'inner')
             ->join(
@@ -141,11 +147,16 @@ class ConversationModel extends Model
                 : ($row['last_msg_body'] ?? $row['last_msg_file_name'] ?? '');
         }
 
+        $isDirect = ($row['type'] ?? '') === 'direct';
         return [
             'id'              => (string) $row['id'],
             'type'            =>          $row['type'],
-            'name'            =>          $row['name'] ?? null,
-            'avatar_url'      =>          $row['avatar_url'] ?? null,
+            'name'            => $isDirect
+                                    ? ($row['other_user_name'] ?? $row['name'] ?? null)
+                                    : ($row['name'] ?? null),
+            'avatar_url'      => $isDirect
+                                    ? ($row['other_user_avatar'] ?? $row['avatar_url'] ?? null)
+                                    : ($row['avatar_url'] ?? null),
             'last_message_at' =>          $row['last_message_at'] ?? null,
             'is_muted'        => (bool)   ($row['is_muted'] ?? false),
             'unread_count'    => (int)    ($row['unread_count'] ?? 0),

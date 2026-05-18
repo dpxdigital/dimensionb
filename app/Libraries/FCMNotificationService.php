@@ -75,27 +75,30 @@ class FCMNotificationService
 
     public function notifyNewMessage(int $userId, int $conversationId, string $senderName): void
     {
-        $this->sendToUser($userId, 'New Message', "Message from $senderName", [
+        $this->sendToUser($userId, $senderName, "{$senderName} sent you a message", [
             'type'            => 'new_message',
             'conversation_id' => (string) $conversationId,
+            'sender_name'     => $senderName,
             'deep_link'       => "/chat/$conversationId",
         ]);
     }
 
-    public function notifyNewGroupMessage(int $userId, int $groupId, string $groupName): void
+    public function notifyNewGroupMessage(int $userId, int $groupId, string $groupName, string $senderName = ''): void
     {
-        $this->sendToUser($userId, $groupName, 'New message in group', [
-            'type'      => 'new_group_message',
-            'group_id'  => (string) $groupId,
-            'deep_link' => "/chat/group/$groupId",
+        $this->sendToUser($userId, $groupName, $senderName ? "$senderName sent a message" : 'New message in group', [
+            'type'        => 'new_group_message',
+            'group_id'    => (string) $groupId,
+            'sender_name' => $senderName,
+            'deep_link'   => "/chat/group/$groupId",
         ]);
     }
 
     public function notifyConnectionRequest(int $userId, string $requesterName): void
     {
         $this->sendToUser($userId, 'Connection Request', "$requesterName wants to connect", [
-            'type'      => 'connection_request',
-            'deep_link' => '/chat/requests',
+            'type'        => 'connection_request',
+            'sender_name' => $requesterName,
+            'deep_link'   => '/chat/requests',
         ]);
     }
 
@@ -104,6 +107,7 @@ class FCMNotificationService
         $this->sendToUser($userId, 'Connection Accepted', "$acceptorName accepted your request", [
             'type'            => 'connection_accepted',
             'conversation_id' => (string) $conversationId,
+            'sender_name'     => $acceptorName,
             'deep_link'       => "/chat/$conversationId",
         ]);
     }
@@ -126,6 +130,11 @@ class FCMNotificationService
         }
 
         $raw = env('FIREBASE_SERVICE_ACCOUNT_JSON', '');
+        // CI4 DotEnv cannot handle \n inside single-quoted values, so the outer
+        // single quotes may be left intact. Strip them before decoding.
+        if ($raw !== '' && $raw[0] === "'" && $raw[-1] === "'") {
+            $raw = substr($raw, 1, -1);
+        }
         $sa  = $raw ? json_decode($raw, true) : null;
 
         if (empty($sa['private_key']) || empty($sa['client_email'])) {
@@ -202,7 +211,7 @@ class FCMNotificationService
                     'android'      => [
                         'priority'     => 'high',
                         'notification' => [
-                            'sound'      => 'default',
+                            'sound'      => 'notification_sound',
                             'channel_id' => $channelId,
                             'icon'       => 'ic_notification',
                             'color'      => '#D94032',
@@ -227,12 +236,21 @@ class FCMNotificationService
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
+            if ($httpCode === 200) continue;
+
             // Remove stale/unregistered tokens
             if ($httpCode === 404) {
                 $errCode = json_decode($response, true)['error']['details'][0]['errorCode'] ?? '';
                 if (in_array($errCode, ['UNREGISTERED', 'INVALID_ARGUMENT'], true)) {
                     db_connect()->table('fcm_tokens')->where('token', $token)->delete();
                 }
+            } elseif ($httpCode === 401) {
+                // Access token expired or invalid — clear cached token so next call re-fetches
+                self::$cachedToken = '';
+                self::$tokenExpiry = 0;
+                log_message('error', '[FCM] 401 Unauthorized — service account may be misconfigured.');
+            } else {
+                log_message('error', "[FCM] Unexpected HTTP $httpCode: $response");
             }
         }
     }

@@ -5,10 +5,11 @@
 <div class="card mb-3" style="background:#161616;border:1px solid #2a2a2a">
     <div class="card-body py-2">
         <form method="get" class="d-flex gap-2 align-items-center">
-            <select name="status" class="form-control form-control-sm" style="background:#1E1E1E;border-color:#333;color:#fff;max-width:140px">
+            <select name="status" class="form-control form-control-sm" style="background:#1E1E1E;border-color:#333;color:#fff;max-width:160px">
                 <option value="">All status</option>
-                <option value="live" <?= ($statusFilter ?? '') === 'live' ? 'selected' : '' ?>>Live now</option>
-                <option value="ended" <?= ($statusFilter ?? '') === 'ended' ? 'selected' : '' ?>>Ended</option>
+                <option value="active"    <?= ($status ?? '') === 'active'    ? 'selected' : '' ?>>Live now</option>
+                <option value="scheduled" <?= ($status ?? '') === 'scheduled' ? 'selected' : '' ?>>Upcoming</option>
+                <option value="ended"     <?= ($status ?? '') === 'ended'     ? 'selected' : '' ?>>Ended</option>
             </select>
             <button class="btn btn-sm btn-secondary">Filter</button>
             <span class="ml-auto text-muted" style="font-size:.8rem"><?= number_format($total) ?> sessions</span>
@@ -25,7 +26,7 @@
                     <th>Title</th>
                     <th>Category</th>
                     <th>Viewers</th>
-                    <th>Started</th>
+                    <th>Time</th>
                     <th>Status</th>
                     <th></th>
                 </tr>
@@ -34,22 +35,34 @@
                 <?php foreach ($sessions as $s): ?>
                 <tr>
                     <td style="font-size:.82rem;color:#ddd"><?= esc($s['host_name'] ?? 'Unknown') ?></td>
-                    <td style="font-size:.82rem;color:#ddd"><?= esc(mb_strimwidth($s['title'], 0, 45, '…')) ?></td>
-                    <td style="font-size:.8rem;color:#888"><?= esc($s['category_name'] ?? '—') ?></td>
+                    <td style="font-size:.82rem;color:#ddd"><?= esc(mb_strimwidth($s['title'] ?? '', 0, 45, '…')) ?></td>
+                    <td style="font-size:.8rem;color:#888"><?= esc($s['category'] ?? '—') ?></td>
                     <td style="font-size:.8rem"><?= number_format($s['viewer_count'] ?? 0) ?></td>
-                    <td style="font-size:.8rem;color:#888"><?= date('M j H:i', strtotime($s['started_at'])) ?></td>
+                    <td style="font-size:.8rem;color:#888">
+                        <?php
+                            if ($s['status'] === 'scheduled' && ! empty($s['scheduled_at'])) {
+                                echo date('M j H:i', strtotime($s['scheduled_at']));
+                            } elseif (! empty($s['started_at'])) {
+                                echo date('M j H:i', strtotime($s['started_at']));
+                            } else {
+                                echo '—';
+                            }
+                        ?>
+                    </td>
                     <td>
-                        <?php if ($s['status'] === 'live'): ?>
-                        <span class="badge badge-danger"><i class="fas fa-circle mr-1" style="font-size:.5rem"></i>LIVE</span>
+                        <?php if ($s['status'] === 'active'): ?>
+                            <span class="badge badge-danger"><i class="fas fa-circle mr-1" style="font-size:.5rem"></i>LIVE</span>
+                        <?php elseif ($s['status'] === 'scheduled'): ?>
+                            <span class="badge badge-primary">Upcoming</span>
                         <?php else: ?>
-                        <span class="badge badge-secondary">Ended</span>
+                            <span class="badge badge-secondary">Ended</span>
                         <?php endif; ?>
                     </td>
                     <td class="text-right">
-                        <?php if ($s['status'] === 'live'): ?>
-                        <button class="btn btn-xs btn-outline-danger" onclick="endSession(<?= $s['id'] ?>)">End</button>
+                        <?php if ($s['status'] === 'active'): ?>
+                        <button class="btn btn-xs btn-outline-danger" onclick="endSession(<?= (int)$s['id'] ?>)">End</button>
                         <?php endif; ?>
-                        <button class="btn btn-xs btn-outline-secondary ml-1" onclick="deleteSession(<?= $s['id'] ?>)">Delete</button>
+                        <button class="btn btn-xs btn-outline-secondary ml-1" onclick="deleteSession(<?= (int)$s['id'] ?>)">Delete</button>
                     </td>
                 </tr>
                 <?php endforeach; ?>
@@ -79,7 +92,7 @@ function endSession(id) {
 function deleteSession(id) {
     if (!confirm('Delete this session record?')) return;
     fetch(BASE + `/manager/live/${id}/delete`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error); });
+        .then(r => r.json()).then(d => { if (d.success) location.reload(); else alert(d.error || 'Error'); });
 }
 </script>
 <?= $this->endSection() ?>

@@ -18,8 +18,11 @@ class PostsController extends BaseApiController
         $mediaUrls = [];
 
         $mediaFiles = $files['media'] ?? $files['media[]'] ?? [];
-        if (empty($body) && empty($mediaFiles)) {
-            return $this->error('Post must have text or at least one media file.', 422);
+        $s3         = null;
+        $audioFile  = $this->request->getFile('audio');
+        $hasAudio   = $audioFile !== null && $audioFile->isValid();
+        if (empty($body) && empty($mediaFiles) && ! $hasAudio) {
+            return $this->error('Post must have text, media, or an audio file.', 422);
         }
 
         if (strlen($body) > 2200) {
@@ -40,7 +43,9 @@ class PostsController extends BaseApiController
                 if (! $file->isValid()) continue;
 
                 $ext = strtolower($file->getClientExtension() ?: $file->guessExtension() ?: '');
-                if (! in_array($ext, $allowedExts, true)) {
+                $heicExts    = ['heic', 'heif'];
+                $allowedAll  = array_merge($allowedExts, $heicExts);
+                if (! in_array($ext, $allowedAll, true)) {
                     return $this->error('Unsupported file type: ' . $ext, 422);
                 }
                 if ($file->getSize() > 50 * 1024 * 1024) {
@@ -51,6 +56,15 @@ class PostsController extends BaseApiController
                 $file->move($tmpDir, $filename);
                 $tmpPath  = $tmpDir . $filename;
                 $mimeType = in_array($ext, $videoExts, true) ? "video/{$ext}" : "image/{$ext}";
+
+                // Transcode HEIC/HEIF → WebP (JPEG fallback)
+                if (in_array($ext, $heicExts, true)) {
+                    try {
+                        $tmpPath = $this->convertHeicIfNeeded($tmpPath, $tmpDir, $filename, $ext, $mimeType);
+                    } catch (\Throwable $e) {
+                        return $this->error('HEIC conversion failed: ' . $e->getMessage(), 422);
+                    }
+                }
 
                 try {
                     $url = $s3->uploadOrLocal($tmpPath, "uploads/posts/{$filename}", $mimeType, 'posts');
@@ -64,11 +78,46 @@ class PostsController extends BaseApiController
             }
         }
 
+        // ── Audio upload ─────────────────────────────────────────────────────────
+        $audioUrl = null;
+        if ($hasAudio) {
+            $audioExts = ['mp3', 'm4a', 'aac', 'wav', 'ogg', 'oga', 'flac'];
+            $audioExt  = strtolower($audioFile->getClientExtension() ?: $audioFile->guessExtension() ?: '');
+            if (! in_array($audioExt, $audioExts, true)) {
+                return $this->error('Unsupported audio type: ' . $audioExt, 422);
+            }
+            if ($audioFile->getSize() > 50 * 1024 * 1024) {
+                return $this->error('Audio file must be under 50 MB.', 422);
+            }
+            $tmpDir = WRITEPATH . 'uploads/tmp/';
+            if (! is_dir($tmpDir)) mkdir($tmpDir, 0755, true);
+            $audioFilename = 'post_audio_' . $userId . '_' . time() . '_' . uniqid() . '.' . $audioExt;
+            $audioFile->move($tmpDir, $audioFilename);
+            try {
+                $s3       = $s3 ?? new S3Uploader();
+                $audioUrl = $s3->uploadOrLocal(
+                    $tmpDir . $audioFilename,
+                    "uploads/posts/audio/{$audioFilename}",
+                    "audio/{$audioExt}",
+                    'posts'
+                );
+            } catch (\Throwable $e) {
+                return $this->error('Audio upload failed: ' . $e->getMessage(), 500);
+            }
+        }
+
         $db = db_connect();
+
+        // Add audio_url column if it doesn't exist yet (one-time migration)
+        try {
+            $db->query('ALTER TABLE posts ADD COLUMN audio_url VARCHAR(500) NULL DEFAULT NULL');
+        } catch (\Throwable $_) {}
+
         $db->table('posts')->insert([
             'user_id'    => $userId,
             'body'       => $body ?: null,
             'media'      => ! empty($mediaUrls) ? json_encode($mediaUrls) : null,
+            'audio_url'  => $audioUrl,
             'created_at' => date('Y-m-d H:i:s'),
             'updated_at' => date('Y-m-d H:i:s'),
         ]);
@@ -102,6 +151,8 @@ class PostsController extends BaseApiController
             ->orderBy('p.id', 'DESC')
             ->limit($limit + 1);
 
+        // Exclude circle posts — those belong only in the community tab
+        $query->where('(p.circle_id IS NULL OR p.circle_id = 0)');
         if ($cursor > 0) $query->where('p.id <', $cursor);
         if ($q !== '') $query->like('p.body', $q);
 
@@ -261,6 +312,7 @@ class PostsController extends BaseApiController
             'avatar_url'    => $this->proxyS3Url($row['avatar_url'] ?? null),
             'body'          => $row['body'] ?? null,
             'media'         => $media,
+            'audio_url'     => $this->proxyS3Url($row['audio_url'] ?? null),
             'like_count'    => (int) ($row['like_count']    ?? 0),
             'comment_count' => (int) ($row['comment_count'] ?? 0),
             'share_count'   => (int) ($row['share_count']   ?? 0),

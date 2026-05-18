@@ -21,6 +21,18 @@ class ChatController extends BaseApiController
         $this->conversations = new ConversationModel();
         $this->messages      = new MessageModel();
         $this->connections   = new ConnectionModel();
+        $this->ensureStickerType();
+    }
+
+    // Ensures the messages.type ENUM includes 'sticker'.
+    // Runs SHOW COLUMNS once per request; ALTER TABLE only fires if 'sticker' is absent.
+    private function ensureStickerType(): void
+    {
+        $db  = db_connect();
+        $col = $db->query("SHOW COLUMNS FROM messages LIKE 'type'")->getRowArray();
+        if ($col && strpos($col['Type'], 'sticker') === false) {
+            $db->query("ALTER TABLE messages MODIFY COLUMN type ENUM('text','image','file','listing_share','system','sticker') NOT NULL DEFAULT 'text'");
+        }
     }
 
     // ── GET /v1/chat/conversations ────────────────────────────────────────────
@@ -161,7 +173,7 @@ class ChatController extends BaseApiController
         $input = $this->inputJson();
 
         // Validate type
-        $validTypes = ['text', 'image', 'file', 'listing_share'];
+        $validTypes = ['text', 'image', 'file', 'listing_share', 'sticker'];
         $type = $input['type'] ?? 'text';
         if (! in_array($type, $validTypes, true)) {
             return $this->error('Invalid message type.', 422);
@@ -205,6 +217,13 @@ class ChatController extends BaseApiController
                 $insertData['file_size'] = $fileSize;
                 $insertData['file_mime'] = $fileMime;
                 $insertData['body']      = $input['body'] ?? null;
+                break;
+
+            case 'sticker':
+                if (! $this->validateData($input, ['body' => 'required|max_length[10]'])) {
+                    return $this->validationError($this->validator->getErrors());
+                }
+                $insertData['body'] = trim($input['body']);
                 break;
 
             case 'listing_share':
@@ -587,7 +606,6 @@ class ChatController extends BaseApiController
         $query = $db->table('users')
             ->select('id, name, avatar_url, location')
             ->where('id !=', $userId)
-            ->where('is_active', 1)
             ->orderBy('name', 'ASC')
             ->limit(30);
 

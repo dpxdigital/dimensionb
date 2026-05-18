@@ -23,12 +23,20 @@ $routes->group('v1', static function (RouteCollection $routes): void {
     // ── App content / legal (public) ─────────────────────────────────────────
     $routes->get('app/legal/(:segment)', 'AppContentController::legal/$1');
 
+    // ── RSS Feed Aggregator (public read endpoints — no auth required) ────────
+    $routes->get('rss/articles', 'Rss\RssController::articles');
+    $routes->get('rss/feeds',    'Rss\RssController::feeds');
+
     // ── Auth (public) ─────────────────────────────────────────────────────────
     $routes->group('auth', static function (RouteCollection $routes): void {
-        $routes->post('login',    'Auth\AuthController::login');
-        $routes->post('register', 'Auth\AuthController::register');
-        $routes->post('refresh',  'Auth\AuthController::refresh');
-        $routes->post('social',   'Auth\AuthController::social');
+        $routes->post('login',           'Auth\AuthController::login');
+        $routes->post('register',        'Auth\AuthController::register');
+        $routes->post('refresh',         'Auth\AuthController::refresh');
+        $routes->post('social',          'Auth\AuthController::social');
+        $routes->post('forgot-password',     'Auth\AuthController::forgotPassword');
+        $routes->post('reset-password',      'Auth\AuthController::resetPassword');
+        $routes->post('verify-email',        'Auth\AuthController::verifyEmail');
+        $routes->post('resend-verification', 'Auth\AuthController::resendVerification');
 
         // Protected auth routes
         $routes->group('', ['filter' => 'auth'], static function (RouteCollection $routes): void {
@@ -36,8 +44,9 @@ $routes->group('v1', static function (RouteCollection $routes): void {
             $routes->put('me',          'Auth\AuthController::updateMe');
             $routes->post('me/avatar',  'Auth\AuthController::uploadAvatar');
             $routes->post('me/cover',   'Auth\AuthController::uploadCover');
-            $routes->post('logout',     'Auth\AuthController::logout');
-            $routes->post('fcm-token',  'Auth\AuthController::registerFcmToken');
+            $routes->post('logout',           'Auth\AuthController::logout');
+            $routes->post('fcm-token',        'Auth\AuthController::registerFcmToken');
+            $routes->post('change-password',  'Auth\AuthController::changePassword');
         });
     });
 
@@ -72,18 +81,85 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         // ── Live (specific routes before wildcard :id) ────────────────────────
         $routes->get('live',                      'Live\LiveController::index');
         $routes->post('live/start',               'Live\LiveController::start');
+        $routes->post('live/schedule',            'Live\LiveController::schedule');
         $routes->get('live/(:num)/replay',        'Live\LiveController::replay/$1');
+        $routes->post('live/(:num)/start',        'Live\LiveController::startScheduled/$1');
         $routes->post('live/(:num)/join',         'Live\LiveController::join/$1');
         $routes->post('live/(:num)/end',          'Live\LiveController::end/$1');
         $routes->post('live/(:num)/cohost',       'Live\LiveController::addCohost/$1');
         $routes->post('live/(:num)/cohost-join',  'Live\LiveController::cohostJoin/$1');
-        $routes->delete('live/(:num)/cohost',     'Live\LiveController::removeCohost/$1');
+        $routes->delete('live/(:num)/cohost',          'Live\LiveController::removeCohost/$1');
+        $routes->post('live/(:num)/kick-participant',   'Live\LiveController::kickParticipant/$1');
         $routes->get('live/(:num)/comments',      'Live\LiveController::getComments/$1');
         $routes->post('live/(:num)/comment',      'Live\LiveController::comment/$1');
         $routes->post('live/(:num)/react',        'Live\LiveController::react/$1');
         $routes->post('live/(:num)/report',       'Live\LiveController::reportSession/$1');
+        $routes->post('live/(:num)/remind',       'Live\LiveController::toggleRemind/$1');
         $routes->get('live/(:num)',               'Live\LiveController::show/$1');
         $routes->put('live/(:num)',               'Live\LiveController::update/$1');
+
+        // ── Circles ───────────────────────────────────────────────────────────
+        $routes->get('circles',                           'Circles\CirclesController::index');
+        $routes->post('circles',                          'Circles\CirclesController::create');
+        $routes->get('circles/(:num)',                    'Circles\CirclesController::show/$1');
+        $routes->patch('circles/(:num)',                  'Circles\CirclesController::update/$1');
+        $routes->post('circles/(:num)/join',              'Circles\CirclesController::join/$1');
+        $routes->post('circles/(:num)/leave',             'Circles\CirclesController::leave/$1');
+        $routes->delete('circles/(:num)',                 'Circles\CirclesController::delete/$1');
+        $routes->get('circles/(:num)/members',            'Circles\CirclesController::members/$1');
+        $routes->patch('circles/(:num)/members/(:num)',   'Circles\CirclesController::updateMember/$1/$2');
+        $routes->put('circles/(:num)/members/(:num)/role','Circles\CirclesController::updateMemberRole/$1/$2');
+        $routes->delete('circles/(:num)/members/(:num)', 'Circles\CirclesController::removeMember/$1/$2');
+        $routes->post('circles/(:num)/members',           'Circles\CirclesController::inviteMember/$1');
+        $routes->get('circles/(:num)/movements',          'Circles\CirclesController::listMovements/$1');
+        $routes->post('circles/(:num)/movements/(:num)',  'Circles\CirclesController::linkMovement/$1/$2');
+        $routes->delete('circles/(:num)/movements/(:num)', 'Circles\CirclesController::unlinkMovement/$1/$2');
+
+        // Circle posts
+        $routes->get('circles/(:num)/posts',          'Circles\CirclePostsController::index/$1');
+        $routes->get('circles/(:num)/posts/pending',  'Circles\CirclePostsController::pending/$1');
+        $routes->post('circles/(:num)/posts',         'Circles\CirclePostsController::create/$1');
+        $routes->delete('posts/(:num)',                'Circles\CirclePostsController::delete/$1');
+        $routes->post('posts/(:num)/react',            'Circles\CirclePostsController::react/$1');
+        $routes->delete('posts/(:num)/react',          'Circles\CirclePostsController::unreact/$1');
+        $routes->post('posts/(:num)/approve',          'Circles\CirclePostsController::approve/$1');
+        $routes->post('posts/(:num)/reject',           'Circles\CirclePostsController::reject/$1');
+
+        // Circle discussions
+        $routes->get('circles/(:num)/discussions',          'Circles\DiscussionsController::indexForCircle/$1');
+        $routes->get('circles/(:num)/discussions/pending',  'Circles\DiscussionsController::pendingForCircle/$1');
+        $routes->post('circles/(:num)/discussions',         'Circles\DiscussionsController::createForCircle/$1');
+        $routes->post('discussions/(:num)/approve',         'Circles\DiscussionsController::approve/$1');
+        $routes->post('discussions/(:num)/reject',          'Circles\DiscussionsController::reject/$1');
+
+        // ── Movements ─────────────────────────────────────────────────────────
+        $routes->get('movements',              'Movements\MovementsController::index');
+        $routes->post('movements',             'Movements\MovementsController::create');
+        $routes->get('movements/(:num)',       'Movements\MovementsController::show/$1');
+        $routes->patch('movements/(:num)',     'Movements\MovementsController::update/$1');
+        $routes->post('movements/(:num)/follow',   'Movements\MovementsController::follow/$1');
+        $routes->delete('movements/(:num)/follow', 'Movements\MovementsController::unfollow/$1');
+
+        // Movement discussions
+        $routes->get('movements/(:num)/discussions',  'Circles\DiscussionsController::indexForMovement/$1');
+        $routes->post('movements/(:num)/discussions', 'Circles\DiscussionsController::createForMovement/$1');
+
+        // ── Discussions ───────────────────────────────────────────────────────
+        $routes->get('discussions/(:num)',           'Circles\DiscussionsController::show/$1');
+        $routes->patch('discussions/(:num)',         'Circles\DiscussionsController::update/$1');
+        $routes->get('discussions/(:num)/comments',  'Circles\DiscussionsController::comments/$1');
+        $routes->post('discussions/(:num)/comments', 'Circles\DiscussionsController::addComment/$1');
+
+        // ── Community Actions ─────────────────────────────────────────────────
+        $routes->get('actions',              'CommunityActions\CommunityActionsController::index');
+        $routes->post('actions',             'CommunityActions\CommunityActionsController::create');
+        $routes->get('actions/(:num)',       'CommunityActions\CommunityActionsController::show/$1');
+        $routes->patch('actions/(:num)',     'CommunityActions\CommunityActionsController::update/$1');
+        $routes->post('actions/(:num)/participate',   'CommunityActions\CommunityActionsController::participate/$1');
+        $routes->delete('actions/(:num)/participate', 'CommunityActions\CommunityActionsController::unparticipate/$1');
+
+        // ── Community Feed ────────────────────────────────────────────────────
+        $routes->get('community/feed', 'Circles\CommunityFeedController::index');
 
         // ── Posts ─────────────────────────────────────────────────────────────
         $routes->get('posts',                   'Posts\PostsController::index');
@@ -112,6 +188,10 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->put('notifications/(:num)/read',         'Notifications\NotificationsController::markRead/$1');
         $routes->put('notifications/read-all',            'Notifications\NotificationsController::markAllRead');
 
+        // ── Account data management ────────────────────────────────────────────
+        $routes->post('account/data/delete',  'Account\AccountController::deleteData');
+        $routes->delete('account/data',       'Account\AccountController::deleteData');
+
         // ── Onboarding ────────────────────────────────────────────────────────
         $routes->get('interests',                        'Onboarding\OnboardingController::interests');
         $routes->post('onboarding/interests',            'Onboarding\OnboardingController::saveInterests');
@@ -126,6 +206,9 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->get('users/(:num)/follow-status',    'Profile\FollowController::status/$1');
         $routes->post('users/(:num)/follow',          'Profile\FollowController::follow/$1');
         $routes->delete('users/(:num)/follow',        'Profile\FollowController::unfollow/$1');
+
+        // ── Generic image upload ─────────────────────────────────────────────
+        $routes->post('upload',                                  'UploadController::upload');
 
         // ── Chat — File upload ────────────────────────────────────────────────
         $routes->post('chat/upload',                             'Chat\ChatController::uploadFile');
@@ -223,6 +306,12 @@ $routes->group('v1', static function (RouteCollection $routes): void {
         $routes->post('orders/checkout',             'Marketplace\OrdersController::checkout');
         $routes->get('orders',                       'Marketplace\OrdersController::myOrders');
         $routes->put('orders/(:num)/status',         'Marketplace\OrdersController::updateStatus/$1');
+
+        // ── RSS Feed Aggregator — admin endpoints (JWT auth + is_admin check) ─
+        $routes->post('rss/admin/feeds',                      'Rss\RssController::addFeed');
+        $routes->put('rss/admin/feeds/(:num)',                'Rss\RssController::updateFeed/$1');
+        $routes->delete('rss/admin/feeds/(:num)',             'Rss\RssController::deleteFeed/$1');
+        $routes->post('rss/admin/feeds/(:num)/fetch',         'Rss\RssController::fetchFeed/$1');
     });
 
     // ── No-auth: payment gateway redirects & webhooks (no Bearer token) ─────────
@@ -239,6 +328,10 @@ $routes->group('v1', static function (RouteCollection $routes): void {
 
 // ── Admin Manager (session-based, no JWT) ─────────────────────────────────────
 $routes->setDefaultNamespace('App\Controllers\Admin');
+
+// Cron endpoints (token-protected, no auth)
+$routes->get('cron/listing-feeds', 'CronController::listingFeeds');
+$routes->get('cron/rss-feeds',     'CronController::rssFeedsAutoFetch');
 
 // Public: login page (excluded from adminauth filter via AdminAuthFilter logic)
 $routes->get( 'manager/login',  'Auth\AdminAuthController::loginForm');
@@ -257,15 +350,23 @@ $routes->group('manager', ['filter' => 'adminauth'], static function (RouteColle
     $routes->post('users/(:num)/delete',            'UsersController::delete/$1');
 
     // Listings
-    $routes->get( 'listings',                       'ListingsController::index');
-    $routes->get( 'listings/create',                'ListingsController::create');
-    $routes->post('listings/create',                'ListingsController::store');
+    $routes->get( 'listings',                              'ListingsController::index');
+    $routes->get( 'listings/create',                       'ListingsController::create');
+    $routes->post('listings/create',                       'ListingsController::store');
+    $routes->post('listings/import-rss',                   'ListingsController::importRss');
+    // Listing RSS Feeds
+    $routes->post('listings/feeds/store',                  'ListingsController::storeFeed');
+    $routes->post('listings/feeds/fetch-all',              'ListingsController::fetchAllFeeds');
+    $routes->post('listings/feeds/(:num)/delete',          'ListingsController::deleteFeed/$1');
+    $routes->post('listings/feeds/(:num)/fetch',           'ListingsController::fetchFeed/$1');
+    $routes->post('listings/feeds/(:num)/toggle',          'ListingsController::toggleFeed/$1');
     $routes->get( 'listings/(:num)/edit',           'ListingsController::edit/$1');
     $routes->post('listings/(:num)/edit',           'ListingsController::update/$1');
     $routes->get( 'listings/(:num)',                'ListingsController::show/$1');
     $routes->post('listings/(:num)/toggle-status',  'ListingsController::toggleStatus/$1');
     $routes->post('listings/(:num)/trust',          'ListingsController::updateTrust/$1');
     $routes->post('listings/(:num)/delete',         'ListingsController::delete/$1');
+    $routes->post('listings/bulk-delete',            'ListingsController::bulkDelete');
 
     // Moderation
     $routes->get( 'moderation',                                     'ModerationController::index');
@@ -330,6 +431,14 @@ $routes->group('manager', ['filter' => 'adminauth'], static function (RouteColle
     $routes->get( 'app-content',                              'AppContentController::index');
     $routes->get( 'app-content/(:segment)/edit',              'AppContentController::edit/$1');
     $routes->post('app-content/(:segment)/save',              'AppContentController::save/$1');
+
+    // RSS Feed management (super_admin only)
+    $routes->get( 'rss',                    'RssController::index');
+    $routes->post('rss/store',              'RssController::store');
+    $routes->post('rss/(:num)/toggle',      'RssController::toggle/$1');
+    $routes->post('rss/(:num)/delete',      'RssController::delete/$1');
+    $routes->post('rss/(:num)/fetch',       'RssController::fetchNow/$1');
+    $routes->post('rss/fetch-all',          'RssController::fetchAll');
 
     // Admin user management (super_admin only)
     $routes->get( 'admin-users',                              'AdminUsersController::index');

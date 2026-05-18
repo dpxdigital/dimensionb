@@ -14,6 +14,8 @@ class UserModel extends Model
     protected $createdField     = 'created_at';
     protected $updatedField     = 'updated_at';
 
+    // Profile-editable fields only. trust_level, trust_label, is_active, is_vendor
+    // must be updated through explicit admin/system calls, never via user-facing save().
     protected $allowedFields = [
         'name',
         'email',
@@ -26,11 +28,27 @@ class UserModel extends Model
         'city',
         'lat',
         'lng',
-        'trust_level',
-        'trust_label',
-        'is_active',
-        'is_vendor',
+        'email_verified_at',
     ];
+
+    // Used only by registration and admin controllers — bypasses allowedFields restriction.
+    public function setTrustLevel(int $userId, string $trustLevel, string $trustLabel): void
+    {
+        $this->db()->table($this->table)->where('id', $userId)->update([
+            'trust_level' => $trustLevel,
+            'trust_label' => $trustLabel,
+        ]);
+    }
+
+    public function setActiveStatus(int $userId, bool $isActive): void
+    {
+        $this->db()->table($this->table)->where('id', $userId)->update(['is_active' => (int)$isActive]);
+    }
+
+    public function setVendorStatus(int $userId, bool $isVendor): void
+    {
+        $this->db()->table($this->table)->where('id', $userId)->update(['is_vendor' => (int)$isVendor]);
+    }
 
     // ── Public finders ────────────────────────────────────────────────────────
 

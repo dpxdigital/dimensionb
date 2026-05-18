@@ -20,9 +20,9 @@ class AdminAuthFilter implements FilterInterface
             return;
         }
 
-        // Auto-logout after 2 hours of inactivity
+        // Auto-logout after 30 minutes of inactivity
         $lastActivity = $session->get('admin_last_activity');
-        if ($lastActivity && (time() - $lastActivity) > 7200) {
+        if ($lastActivity && (time() - $lastActivity) > 1800) {
             $session->destroy();
             return redirect()->to(site_url('manager/login'))->with('error', 'Session expired. Please log in again.');
         }

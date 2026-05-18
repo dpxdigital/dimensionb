@@ -42,6 +42,7 @@ class Filters extends BaseFilters
         'ratelimit'     => RateLimitFilter::class,
         'authratelimit' => AuthRateLimitFilter::class,
         'adminauth'     => AdminAuthFilter::class,
+        'hsts'          => \App\Filters\HSTSFilter::class,
     ];
 
     /**
@@ -59,7 +60,6 @@ class Filters extends BaseFilters
      */
     public array $required = [
         'before' => [
-            // 'forcehttps', // disabled for local dev
             'pagecache',  // Web Page Caching
         ],
         'after' => [
@@ -81,14 +81,12 @@ class Filters extends BaseFilters
     public array $globals = [
         'before' => [
             'cors',
-            // 'honeypot',
-            // 'csrf',
-            // 'invalidchars',
+            ENVIRONMENT === 'production' ? 'forcehttps' : null,
         ],
         'after' => [
             'cors',
-            'secureheaders', // X-Content-Type-Options, X-Frame-Options, Referrer-Policy
-            // 'honeypot',
+            'secureheaders',
+            'hsts',
         ],
     ];
 
@@ -118,7 +116,7 @@ class Filters extends BaseFilters
      */
     public array $filters = [
         'ratelimit'     => ['before' => ['v1/*']],
-        'authratelimit' => ['before' => ['v1/auth/login', 'v1/auth/register', 'v1/auth/refresh', 'v1/auth/forgot-password']],
+        'authratelimit' => ['before' => ['v1/auth/login', 'v1/auth/register', 'v1/auth/refresh', 'v1/auth/forgot-password', 'v1/auth/verify-email', 'v1/auth/resend-verification', 'v1/auth/reset-password']],
         'adminauth'     => ['before' => ['manager/*']],
     ];
 }

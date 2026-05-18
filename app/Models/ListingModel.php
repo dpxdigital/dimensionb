@@ -114,11 +114,12 @@ class ListingModel extends Model
             ))
         ";
 
+        // Listings with no coordinates are location-agnostic and always included.
+        // Listings with coordinates are included only when within the radius.
         return $this
             ->select("{$havDist} AS distance_km", false)
-            ->where("listings.lat IS NOT NULL")
-            ->where("listings.lng IS NOT NULL")
-            ->having("distance_km <=", $radiusKm)
+            ->having("listings.lat IS NULL OR listings.lng IS NULL OR distance_km <= {$radiusKm}", null, false)
+            ->orderBy("CASE WHEN listings.lat IS NULL THEN 1 ELSE 0 END", 'ASC', false)
             ->orderBy('distance_km', 'ASC');
     }
 

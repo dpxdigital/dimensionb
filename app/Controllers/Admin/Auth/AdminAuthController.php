@@ -23,22 +23,44 @@ class AdminAuthController extends BaseAdminController
             return redirect()->to(site_url('manager/login'))->with('error', 'Email and password are required.');
         }
 
+        // Brute-force protection: 5 failed attempts per IP per 15 minutes
+        $cache      = \Config\Services::cache();
+        $ip         = $this->request->getIPAddress();
+        $lockKey    = 'admin_fail_' . md5($ip);
+        $attempts   = (int) ($cache->get($lockKey) ?? 0);
+
+        if ($attempts >= 5) {
+            return redirect()->to(site_url('manager/login'))
+                ->with('error', 'Too many failed attempts. Please wait 15 minutes before trying again.');
+        }
+
         $admin = db_connect()->table('admin_users')
             ->where('email', $email)
             ->where('is_active', 1)
             ->get()->getRowArray();
 
         if ($admin === null || ! password_verify($password, $admin['password'])) {
+            // Increment failure counter (TTL 15 min)
+            $ttl = 900;
+            $meta = $cache->getMetaData($lockKey);
+            if ($meta && isset($meta['expire'])) {
+                $ttl = max(1, (int)($meta['expire'] - time()));
+            }
+            $cache->save($lockKey, $attempts + 1, $ttl);
+
             try {
                 db_connect()->table('admin_audit_log')->insert([
                     'admin_id'   => null,
                     'action'     => 'login_failed',
-                    'detail'     => "Failed login attempt for: {$email}",
+                    'detail'     => "Failed login attempt for: {$email} from IP: {$ip}",
                     'created_at' => date('Y-m-d H:i:s'),
                 ]);
             } catch (\Throwable $_) {}
             return redirect()->to(site_url('manager/login'))->with('error', 'Invalid credentials.');
         }
+
+        // Clear failure counter on successful login
+        $cache->delete($lockKey);
 
         session()->set([
             'admin_logged_in'    => true,

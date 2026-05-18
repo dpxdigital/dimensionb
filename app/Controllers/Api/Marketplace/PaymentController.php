@@ -115,12 +115,21 @@ class PaymentController extends BaseApiController
 
     public function stripeWebhook(): ResponseInterface
     {
-        $event = json_decode($this->request->getBody(), true);
+        $payload   = $this->request->getBody();
+        $sigHeader = $this->request->getHeaderLine('Stripe-Signature');
+        $secret    = env('STRIPE_WEBHOOK_SECRET', '');
+
+        if ($secret !== '' && ! $this->verifyStripeSignature($payload, $sigHeader, $secret)) {
+            log_message('warning', 'Stripe webhook: invalid signature from ' . $this->request->getIPAddress());
+            return $this->respond(['received' => true], 400);
+        }
+
+        $event = json_decode($payload, true);
         if (($event['type'] ?? '') === 'payment_intent.succeeded') {
             $pi      = $event['data']['object'];
             $orderId = $pi['metadata']['order_id'] ?? null;
             if ($orderId) {
-                $this->db()->table('orders')->where('id', $orderId)->set([
+                $this->db()->table('orders')->where('id', (int)$orderId)->set([
                     'status'         => 'paid',
                     'payment_method' => 'stripe',
                     'updated_at'     => date('Y-m-d H:i:s'),
@@ -133,14 +142,37 @@ class PaymentController extends BaseApiController
     public function paypalWebhook(): ResponseInterface
     {
         $payload = json_decode($this->request->getBody(), true);
+
+        // Verify using a shared secret token in the X-PayPal-Auth-Token header
+        $secret = env('PAYPAL_WEBHOOK_SECRET', '');
+        if ($secret !== '') {
+            $token = $this->request->getHeaderLine('X-PayPal-Auth-Token');
+            if (! hash_equals($secret, $token)) {
+                log_message('warning', 'PayPal webhook: invalid auth token from ' . $this->request->getIPAddress());
+                return $this->respond(['received' => true], 400);
+            }
+        }
+
         if (($payload['event_type'] ?? '') === 'CHECKOUT.ORDER.APPROVED') {
             $orderId = $payload['resource']['purchase_units'][0]['custom_id'] ?? null;
             if ($orderId) {
-                $this->db()->table('orders')->where('id', $orderId)->set([
-                    'status'         => 'paid',
-                    'payment_method' => 'paypal',
-                    'updated_at'     => date('Y-m-d H:i:s'),
-                ])->update();
+                // Verify the order is actually paid before marking — don't trust the webhook alone
+                $order  = $this->db()->table('orders')->where('id', (int)$orderId)->get()->getRowArray();
+                $vendor = $order ? $this->db()->table('vendors')->where('id', $order['vendor_id'])->get()->getRowArray() : null;
+                if ($order && $vendor) {
+                    $verified = $this->verifyPaypalOrder(
+                        $payload['resource']['id'] ?? '',
+                        $vendor['paypal_client_id'] ?? '',
+                        $vendor['paypal_client_secret'] ?? ''
+                    );
+                    if ($verified) {
+                        $this->db()->table('orders')->where('id', (int)$orderId)->set([
+                            'status'         => 'paid',
+                            'payment_method' => 'paypal',
+                            'updated_at'     => date('Y-m-d H:i:s'),
+                        ])->update();
+                    }
+                }
             }
         }
         return $this->respond(['received' => true]);
@@ -148,11 +180,20 @@ class PaymentController extends BaseApiController
 
     public function flutterwaveWebhook(): ResponseInterface
     {
+        $secret = env('FLUTTERWAVE_WEBHOOK_SECRET', '');
+        if ($secret !== '') {
+            $hash = $this->request->getHeaderLine('verif-hash');
+            if (! hash_equals($secret, $hash)) {
+                log_message('warning', 'Flutterwave webhook: invalid hash from ' . $this->request->getIPAddress());
+                return $this->respond(['received' => true], 400);
+            }
+        }
+
         $payload = json_decode($this->request->getBody(), true);
         if (($payload['status'] ?? '') === 'successful') {
             $orderId = $payload['meta']['order_id'] ?? null;
             if ($orderId) {
-                $this->db()->table('orders')->where('id', $orderId)->set([
+                $this->db()->table('orders')->where('id', (int)$orderId)->set([
                     'status'         => 'paid',
                     'payment_method' => 'flutterwave',
                     'updated_at'     => date('Y-m-d H:i:s'),
@@ -160,6 +201,41 @@ class PaymentController extends BaseApiController
             }
         }
         return $this->respond(['received' => true]);
+    }
+
+    private function verifyStripeSignature(string $payload, string $sigHeader, string $secret): bool
+    {
+        $parts = [];
+        foreach (explode(',', $sigHeader) as $part) {
+            [$k, $v] = array_pad(explode('=', $part, 2), 2, '');
+            $parts[$k][] = $v;
+        }
+        $timestamp  = $parts['t'][0]  ?? '';
+        $signatures = $parts['v1']    ?? [];
+        if (! $timestamp || empty($signatures)) return false;
+        if (abs(time() - (int)$timestamp) > 300) return false; // 5-min replay window
+        $expected = hash_hmac('sha256', "{$timestamp}.{$payload}", $secret);
+        foreach ($signatures as $sig) {
+            if (hash_equals($expected, $sig)) return true;
+        }
+        return false;
+    }
+
+    private function verifyPaypalOrder(string $paypalOrderId, string $clientId, string $clientSecret): bool
+    {
+        if (! $paypalOrderId || ! $clientId || ! $clientSecret) return false;
+        [$tokenRaw] = $this->curl('https://api-m.paypal.com/v1/oauth2/token', [
+            CURLOPT_USERPWD     => "{$clientId}:{$clientSecret}",
+            CURLOPT_POSTFIELDS  => 'grant_type=client_credentials',
+        ]);
+        $token = json_decode($tokenRaw, true)['access_token'] ?? '';
+        if (! $token) return false;
+        [$orderRaw] = $this->curl("https://api-m.paypal.com/v2/checkout/orders/{$paypalOrderId}", [
+            CURLOPT_HTTPGET    => true,
+            CURLOPT_HTTPHEADER => ["Authorization: Bearer {$token}", 'Content-Type: application/json'],
+        ]);
+        $order = json_decode($orderRaw, true);
+        return in_array($order['status'] ?? '', ['APPROVED', 'COMPLETED'], true);
     }
 
     // ── Private: gateway initialisers ─────────────────────────────────────────
